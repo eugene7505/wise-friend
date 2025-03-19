@@ -5,4 +5,3 @@ repos:
       - id: ruff # Run the linter
         args: [--fix, --exit-non-zero-on-fix] # Optional: fix and exit on errors
       - id: ruff-format # Run the formatter
-

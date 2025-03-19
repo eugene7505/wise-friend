@@ -8,3 +8,4 @@ streamlit
 langchain
 pandas
 datetime
+pre-commit
