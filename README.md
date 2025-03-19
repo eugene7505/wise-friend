@@ -1,2 +1,6 @@
 # wise-friend
-[Uploading streamlit-wise_friend.webm…]()
+
+
+
+https://github.com/user-attachments/assets/137b8a3e-2df1-4c41-8317-ed16139fbd73
+
