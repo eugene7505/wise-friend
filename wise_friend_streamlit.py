@@ -6,7 +6,7 @@ import streamlit as st
 from langchain import hub
 
 import config
-import utils as wb
+import utils
 
 
 def display_entries(entries):
@@ -30,9 +30,9 @@ if arguments:
 
 st.title("Your Wise Friend Journal")
 
-llm, embeddings = wb.setup_models()
+llm, embeddings = utils.setup_models()
 # load wise store and journal store
-wise_store, journal_store = wb.load_vector_stores(embeddings)
+wise_store, journal_store = utils.load_vector_stores(embeddings)
 prompt = hub.pull(config.PROMPT)
 
 # Add a new journal entry
@@ -42,12 +42,12 @@ content = st.text_area("Entry", "")
 
 if st.button("Add Entry"):
     if content:
-        wb.add_journal_entry(journal_store, content, str(entry_date))
+        utils.add_journal_entry(journal_store, content, str(entry_date))
         st.success("Entry added!")
 
         # journal entries
         entries = (
-            wb.get_journal_entries_with_similar(journal_store, content)
+            utils.get_journal_entries_with_similar(journal_store, content)
             if not dry_run
             else []
         )
@@ -55,10 +55,10 @@ if st.button("Add Entry"):
         display_entries(entries)
 
         # wise responses
-        retrieved_docs = wb.retrieve(content, wise_store) if not dry_run else []
+        retrieved_docs = utils.retrieve(content, wise_store) if not dry_run else []
         print(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
         response = (
-            wb.generate(content, retrieved_docs, llm, prompt) if not dry_run else ""
+            utils.generate(content, retrieved_docs, llm, prompt) if not dry_run else ""
         )
         st.write(f"Your wise friend says: {response}")
     else:
@@ -71,5 +71,5 @@ if uploaded_file is not None:
     file_path = f"./{uploaded_file.name}"
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
-    wb.add_wise_entry(wise_store, file_path)
+    utils.add_wise_entry(wise_store, file_path)
     st.success("Wise friend added!")
