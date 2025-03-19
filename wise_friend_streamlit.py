@@ -21,6 +21,7 @@ def display_entries(entries):
 
 ### Streamlit interface
 # To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
+dry_run = False
 arguments = sys.argv[1:]
 if arguments:
     dry_run = arguments[0] == "dry-run"
