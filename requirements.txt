@@ -1,0 +1,10 @@
+langchain-text-splitters
+langchain-community
+langgraph
+langchain-core
+langchain-fireworks
+langchain-postgres
+streamlit
+langchain
+pandas
+datetime

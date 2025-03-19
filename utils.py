@@ -5,7 +5,6 @@ from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
-from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing_extensions import List
@@ -90,21 +89,3 @@ def get_journal_entries(
 ):
     # todo
     pass
-
-
-# if __name__ == "__main__":
-#     llm, embeddings = setup_models()
-#     # init wise_store and journal store
-#     wise_store, journal_store = setup_vector_stores(embeddings)
-#     prompt = hub.pull(config.PROMPT)
-
-#     journal = input("How are you feeling today? \n")
-#     past_journal = get_journal_entries_with_similar(journal_store, journal)
-#     print(f"Retrieved past journal entries: {past_journal}")
-
-#     retrieved_docs = retrieve(journal, wise_store)
-#     print(f"Retrieved {len(retrieved_docs)} documents from the wise_store")
-#     response = generate(journal, retrieved_docs, llm, prompt)
-#     add_journal_entry(journal_store, journal)
-
-#     print(response)
