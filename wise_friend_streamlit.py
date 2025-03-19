@@ -1,27 +1,37 @@
-import streamlit as st
+import sys
 from datetime import datetime
-import utils as wb
-import config
 
-from langchain import hub
 import pandas as pd
+import streamlit as st
+from langchain import hub
+
+import config
+import utils as wb
+
 
 def display_entries(entries):
-    st.header("Journal Entries Similar to Your Current Mood")
+    st.header("Your Recent Mood")
 
-    dates = [entry[0].metadata['date'] for entry in entries]
+    dates = [entry[0].metadata["date"] for entry in entries]
     entries = [entry[0].page_content for entry in entries]
-    data = {'Dates': dates, 'Entries': entries}
+    data = {"Dates": dates, "Entries": entries}
     df = pd.DataFrame(data)
-    st.dataframe(df) 
+    st.dataframe(df)
 
 
 ### Streamlit interface
+# To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
+arguments = sys.argv[1:]
+if arguments:
+    dry_run = arguments[0] == "dry-run"
+    if dry_run:
+        print("Running in dry-run mode")
+
 st.title("Your Wise Friend Journal")
 
 llm, embeddings = wb.setup_models()
-# init wise_repo and journal store
-wise_store, journal_store = wb.setup_vector_stores(embeddings)
+# load wise store and journal store
+wise_store, journal_store = wb.load_vector_stores(embeddings)
 prompt = hub.pull(config.PROMPT)
 
 # Add a new journal entry
@@ -35,14 +45,30 @@ if st.button("Add Entry"):
         st.success("Entry added!")
 
         # journal entries
-        entries = wb.get_journal_entries_with_similar(journal_store, content)
-        st.info(f"Retrieved {len(entries)} entries from the journal")
+        entries = (
+            wb.get_journal_entries_with_similar(journal_store, content)
+            if not dry_run
+            else []
+        )
+        print(f"Retrieved {len(entries)} entries from the journal")
         display_entries(entries)
 
         # wise responses
-        retrieved_docs = wb.retrieve(content, wise_store)
-        st.info(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
-        response = wb.generate(content, retrieved_docs, llm, prompt)
+        retrieved_docs = wb.retrieve(content, wise_store) if not dry_run else []
+        print(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
+        response = (
+            wb.generate(content, retrieved_docs, llm, prompt) if not dry_run else ""
+        )
         st.write(f"Your wise friend says: {response}")
     else:
         st.error("Please enter some content.")
+
+uploaded_file = st.sidebar.file_uploader(
+    "Add to your wise friends", type=["txt", "pdf"]
+)
+if uploaded_file is not None:
+    file_path = f"./{uploaded_file.name}"
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    wb.add_wise_entry(wise_store, file_path)
+    st.success("Wise friend added!")
