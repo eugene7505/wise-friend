@@ -4,6 +4,8 @@ from datetime import datetime
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
+from langchain_core.messages import SystemMessage
+
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -22,7 +24,12 @@ def retrieve(query: str, vector_store: VectorStore):
 
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
-    messages = prompt.invoke({"question": query, "context": docs_content})
+    base_messages = prompt.invoke({"question": query, "context": docs_content, "history": None}).to_messages()
+    # Prepend the supportive system message
+    supportive_message = SystemMessage(content = "You are a wise, supportive inner voice. Offer empathetic, constructive guidance using provided context from The Almanack of Naval Ravikant to replace self-criticism with empowering insights or new perspectives.")
+    
+    messages = [supportive_message] + base_messages
+
     response = llm.invoke(messages)
     return response.content
 
