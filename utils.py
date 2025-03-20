@@ -4,7 +4,7 @@ from datetime import datetime
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_postgres.vectorstores import PGVector
@@ -24,11 +24,26 @@ def retrieve(query: str, vector_store: VectorStore):
 
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
-    base_messages = prompt.invoke({"question": query, "context": docs_content, "history": None}).to_messages()
+
     # Prepend the supportive system message
-    supportive_message = SystemMessage(content = "You are a wise, supportive inner voice. Offer empathetic, constructive guidance using provided context from The Almanack of Naval Ravikant to replace self-criticism with empowering insights or new perspectives.")
+    supportive_message = SystemMessage(content = "You are a wise, supportive inner voice. Offer empathetic, gentle guidance to foster self-understanding and growth by using provided context from The Almanack of Naval Ravikant.")
     
-    messages = [supportive_message] + base_messages
+    base_messages = HumanMessage(content = """After reading the question or journal entry, craft a response in a compassionate, supportive, and empowering tone, similar to how a therapist would communicate. Acknowledge the user's emotions, validate their experiences, and offer thoughtful insights or gentle guidance.
+
+    Your response should be concise, well-structured, easily understandable, and provide a sense of encouragement. If the retrieved context contains multiple references, integrate them seamlessly while staying true to the original contexts in a warm and empathetic tone.
+
+    If you don’t know the answer, express that honestly while still offering validation or encouragement. Remember, the goal is to provide a supportive and empowering response that fosters self-understanding and growth.
+                                 
+    **Length Constraint**: Ensure the response is less than 3 paragraphs or 150 words.
+
+    Question: {question} 
+    Chat History: {history}
+
+    Context: {context} 
+    Answer:""".format(question=query, history=None, context=docs_content)
+    )
+    
+    messages = [supportive_message] + [base_messages]
 
     response = llm.invoke(messages)
     return response.content
