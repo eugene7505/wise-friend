@@ -24,10 +24,14 @@ def retrieve(query: str, vector_store: VectorStore):
 
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
-    base_messages = prompt.invoke({"question": query, "context": docs_content, "history": None}).to_messages()
+    base_messages = prompt.invoke(
+        {"question": query, "context": docs_content, "history": None}
+    ).to_messages()
     # Prepend the supportive system message
-    supportive_message = SystemMessage(content = "You are a wise, supportive inner voice. Offer empathetic, constructive guidance using provided context from The Almanack of Naval Ravikant to replace self-criticism with empowering insights or new perspectives.")
-    
+    supportive_message = SystemMessage(
+        content="You are a wise, supportive inner voice. Offer empathetic, constructive guidance using provided context from The Almanack of Naval Ravikant to replace self-criticism with empowering insights or new perspectives."
+    )
+
     messages = [supportive_message] + base_messages
 
     response = llm.invoke(messages)
@@ -71,7 +75,7 @@ def add_wise_entry(wise_store, file_path: str):
     all_splits = text_splitter.split_documents(docs)
     batch_size = 200
     for i in range(0, len(all_splits), batch_size):
-        batch = all_splits[i:i + batch_size]
+        batch = all_splits[i : i + batch_size]
         wise_store.add_documents(batch)
 
 
