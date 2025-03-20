@@ -86,7 +86,7 @@ def add_wise_entry(wise_store, file_path: str):
     all_splits = text_splitter.split_documents(docs)
     batch_size = 200
     for i in range(0, len(all_splits), batch_size):
-        batch = all_splits[i:i + batch_size]
+        batch = all_splits[i : i + batch_size]
         wise_store.add_documents(batch)
 
 
