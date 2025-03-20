@@ -26,7 +26,7 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
 
     # Prepend the supportive system message
-    supportive_message = SystemMessage(content = "You are a wise, supportive inner voice. Offer empathetic, gentle guidance to foster self-understanding and growth by using provided context from The Almanack of Naval Ravikant.")
+    supportive_message = SystemMessage(content = "You are a wise, supportive inner voice. Offer empathetic, gentle guidance to foster self-understanding and growth by using provided context.")
     
     base_messages = HumanMessage(content = """After reading the question or journal entry, craft a response in a compassionate, supportive, and empowering tone, similar to how a therapist would communicate. Acknowledge the user's emotions, validate their experiences, and offer thoughtful insights or gentle guidance.
 
