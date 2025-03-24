@@ -13,6 +13,10 @@ from typing_extensions import List
 
 import config
 
+# Calculate similarity score for citations
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -103,3 +107,28 @@ def get_journal_entries(
 ):
     # todo
     pass
+
+
+# Functions to display citations
+def embedding_paragraph(paragrph: str, embeddings_model) -> np.ndarray:
+    embedding = embeddings_model.embed_query(paragrph)
+    return np.array(embedding).reshape(1, -1)
+
+
+def calculate_semantic_similarity(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    # Calculate cosine similarity
+    similarity_score = cosine_similarity(embedding1, embedding2)[0][0]
+    return similarity_score
+
+def display_top_n_citations(context: List[Document], llm_response: str, embeddings: FireworksEmbeddings, n: int):
+    llm_response_embedding = embedding_paragraph(llm_response, embeddings)
+
+    similarity_scores = []
+    for idx, context in enumerate(context):
+        context_content = context.page_content[:1000]
+        context_embedding = embedding_paragraph(context_content, embeddings)
+        similarity_score = calculate_semantic_similarity(llm_response_embedding, context_embedding)
+        similarity_scores.append([idx, similarity_score, context_content])
+        sorted_similarity_scores = sorted(similarity_scores, key= lambda x: x[1], reverse=True)
+    top_n_citations = sorted_similarity_scores[:n]
+    return [citation[2] for citation in top_n_citations]
