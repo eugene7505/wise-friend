@@ -13,6 +13,10 @@ from typing_extensions import List
 
 import config
 
+# Calculate similarity score for citations
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -29,7 +33,7 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     ).to_messages()
     # Prepend the supportive system message
     supportive_message = SystemMessage(
-        content="You are a wise, supportive inner voice. Offer empathetic, constructive guidance using provided context from The Almanack of Naval Ravikant to replace self-criticism with empowering insights or new perspectives."
+        content="You are a wise, supportive inner voice. Offer empathetic, gentle guidance using provided context to replace self-criticism with empowering insights or new perspectives."
     )
 
     messages = [supportive_message] + base_messages
@@ -103,3 +107,28 @@ def get_journal_entries(
 ):
     # todo
     pass
+
+
+# Functions to display citations
+def embedding_paragraph(paragrph: str, embeddings_model) -> np.ndarray:
+    embedding = embeddings_model.embed_query(paragrph)
+    return np.array(embedding).reshape(1, -1)
+
+
+def calculate_semantic_similarity(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    # Calculate cosine similarity
+    similarity_score = cosine_similarity(embedding1, embedding2)[0][0]
+    return similarity_score
+
+def display_top_n_citations(context: List[Document], llm_response: str, embeddings: FireworksEmbeddings, n: int):
+    llm_response_embedding = embedding_paragraph(llm_response, embeddings)
+
+    similarity_scores = []
+    for idx, doc in enumerate(context):
+        doc_content = doc.page_content[:1000]
+        doc_embedding = embedding_paragraph(doc_content, embeddings)
+        similarity_score = calculate_semantic_similarity(llm_response_embedding, doc_embedding)
+        similarity_scores.append([idx, similarity_score, doc_content])
+        sorted_similarity_scores = sorted(similarity_scores, key= lambda x: x[1], reverse=True)
+    top_n_citations = sorted_similarity_scores[:n]
+    return [citation[2] for citation in top_n_citations]
