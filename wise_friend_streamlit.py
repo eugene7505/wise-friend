@@ -60,8 +60,9 @@ if st.button("Add Entry"):
         response = (
             utils.generate(content, retrieved_docs, llm, prompt) if not dry_run else ""
         )
+        top_citations = utils.display_top_n_citations(retrieved_docs, response, embeddings, n=2) if not dry_run else ""
         st.write(f"Your wise friend says: {response}")
-        st.write(f"Reference: {utils.display_top_n_citations(retrieved_docs, response, embeddings, n=2)}")
+        st.write(f"Reference: {top_citations}")
     else:
         st.error("Please enter some content.")
 

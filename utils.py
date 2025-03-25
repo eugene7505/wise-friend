@@ -124,11 +124,11 @@ def display_top_n_citations(context: List[Document], llm_response: str, embeddin
     llm_response_embedding = embedding_paragraph(llm_response, embeddings)
 
     similarity_scores = []
-    for idx, context in enumerate(context):
-        context_content = context.page_content[:1000]
-        context_embedding = embedding_paragraph(context_content, embeddings)
-        similarity_score = calculate_semantic_similarity(llm_response_embedding, context_embedding)
-        similarity_scores.append([idx, similarity_score, context_content])
+    for idx, doc in enumerate(context):
+        doc_content = doc.page_content[:1000]
+        doc_embedding = embedding_paragraph(doc_content, embeddings)
+        similarity_score = calculate_semantic_similarity(llm_response_embedding, doc_embedding)
+        similarity_scores.append([idx, similarity_score, doc_content])
         sorted_similarity_scores = sorted(similarity_scores, key= lambda x: x[1], reverse=True)
     top_n_citations = sorted_similarity_scores[:n]
     return [citation[2] for citation in top_n_citations]
