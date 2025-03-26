@@ -61,11 +61,23 @@ if st.button("Add Entry"):
             utils.generate(content, retrieved_docs, llm, prompt) if not dry_run else ""
         )
         top_citations = utils.display_top_n_citations(retrieved_docs, response, embeddings, n=2) if not dry_run else ""
-        st.write(f"Your wise friend says: {response}")
-        st.write(f"Reference: {top_citations}")
+        with st.expander(f"Journal Entry {entry_date}"):
+            st.markdown(f"**Journal Entry:**  \n\n*{content}*")
+            st.markdown(f"**Wise Friend:**  \n\n*{response}*")
+            # st.markdown(f"**Reference:**  \n\n*{top_citations}*")
+            for i, ref in enumerate(top_citations):
+                clean_text = ref.replace('\n', '<br>').replace('\xa0', ' ')
+                st.markdown(f"**Reference {i+1}:**", unsafe_allow_html=True)
+                st.markdown(clean_text, unsafe_allow_html=True)
+                st.markdown("---")
+
+
+        # st.write(f"Your wise friend says: {response}")
+        # st.write(f"Reference: {top_citations}")
     else:
         st.error("Please enter some content.")
 
+# Upload a document to add to the wise store
 uploaded_file = st.sidebar.file_uploader(
     "Add to your wise friends", type=["txt", "pdf"]
 )
