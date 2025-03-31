@@ -12,6 +12,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing_extensions import List
 
 import config
+import re
 
 # Calculate similarity score for citations
 from sklearn.metrics.pairwise import cosine_similarity
@@ -73,6 +74,10 @@ def setup_models():
 def add_wise_entry(wise_store, file_path: str):
     loader = PyMuPDFLoader(file_path)
     docs = loader.load()
+    # Clean citations like [1], [23], etc.
+    for doc in docs:
+        doc.page_content = re.sub(r"\[\d+\]", "", doc.page_content)
+    
     # RecursiveCharacterTextSplitter allows you to split based on sentence boundaries,
     # and then split the sentences into chunks of a certain size, if the sentence is too long.
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
