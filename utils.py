@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 
+from langchain import hub
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
@@ -10,9 +11,10 @@ from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing_extensions import List
-
+from sqlalchemy import text, insert, Table, MetaData, Sequence, Column, Integer, String
 import config
 import re
+from enum import Enum
 
 # Calculate similarity score for citations
 from sklearn.metrics.pairwise import cosine_similarity
@@ -20,6 +22,13 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+prompt = hub.pull(config.PROMPT)
+
+
+class Category(Enum):
+    DOCUMENT = "document"
 
 
 def retrieve(query: str, vector_store: VectorStore):
@@ -57,6 +66,22 @@ def load_vector_stores(embeddings):
     return wise_store, journal_store
 
 
+def create_log_table(engine):
+    # creates all other dependent tables if not exists
+    metadata = MetaData()
+    # Define a table using metadata
+    log_table = Table(
+        "log_table",
+        metadata,
+        Column("id", Integer, Sequence("some_id_seq", start=1), primary_key=True),
+        Column("content", String, nullable=False),
+        Column("date", String, nullable=False),
+        Column("category", String, nullable=False),
+    )
+    metadata.create_all(engine)
+    return log_table
+
+
 def setup_models():
     llm = ChatFireworks(
         model=config.CHAT_MODEL,
@@ -71,13 +96,20 @@ def setup_models():
     return llm, embeddings
 
 
+def log_wise_entry(log_table, content, date, category, engine):
+    query = insert(log_table).values(content=content, date=date, category=category)
+    with engine.connect() as conn:
+        conn.execute(query)
+        conn.commit()
+
+
 def add_wise_entry(wise_store, file_path: str):
     loader = PyMuPDFLoader(file_path)
     docs = loader.load()
     # Clean citations like [1], [23], etc.
     for doc in docs:
         doc.page_content = re.sub(r"\[\d+\]", "", doc.page_content)
-    
+
     # RecursiveCharacterTextSplitter allows you to split based on sentence boundaries,
     # and then split the sentences into chunks of a certain size, if the sentence is too long.
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
@@ -107,11 +139,14 @@ def get_journal_entries_with_similar(
     return [entry for entry in entries if entry[1] <= threshold]
 
 
-def get_journal_entries(
-    journal_store, anchor: str, date=datetime.now().strftime("%Y-%m-%d"), k=5
-):
-    # todo
-    pass
+def get_wise_documents(engine):
+    with engine.connect() as connection:
+        result = connection.execute(
+            text(
+                f"SELECT content, date FROM log_table where category = '{Category.DOCUMENT.value}'"
+            )
+        ).fetchall()
+    return [row[:2] for row in result if row[0]]
 
 
 # Functions to display citations
@@ -120,20 +155,29 @@ def embedding_paragraph(paragrph: str, embeddings_model) -> np.ndarray:
     return np.array(embedding).reshape(1, -1)
 
 
-def calculate_semantic_similarity(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+def calculate_semantic_similarity(
+    embedding1: np.ndarray, embedding2: np.ndarray
+) -> float:
     # Calculate cosine similarity
     similarity_score = cosine_similarity(embedding1, embedding2)[0][0]
     return similarity_score
 
-def display_top_n_citations(context: List[Document], llm_response: str, embeddings: FireworksEmbeddings, n: int):
+
+def display_top_n_citations(
+    context: List[Document], llm_response: str, embeddings: FireworksEmbeddings, n: int
+):
     llm_response_embedding = embedding_paragraph(llm_response, embeddings)
 
     similarity_scores = []
     for idx, doc in enumerate(context):
         doc_content = doc.page_content[:1000]
         doc_embedding = embedding_paragraph(doc_content, embeddings)
-        similarity_score = calculate_semantic_similarity(llm_response_embedding, doc_embedding)
+        similarity_score = calculate_semantic_similarity(
+            llm_response_embedding, doc_embedding
+        )
         similarity_scores.append([idx, similarity_score, doc_content])
-        sorted_similarity_scores = sorted(similarity_scores, key= lambda x: x[1], reverse=True)
+        sorted_similarity_scores = sorted(
+            similarity_scores, key=lambda x: x[1], reverse=True
+        )
     top_n_citations = sorted_similarity_scores[:n]
     return [citation[2] for citation in top_n_citations]
