@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 
+from langchain import hub
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
@@ -10,6 +11,7 @@ from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing_extensions import List
+from sqlalchemy import create_engine, text
 
 import config
 import re
@@ -20,6 +22,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+prompt = hub.pull(config.PROMPT)
 
 
 def retrieve(query: str, vector_store: VectorStore):
@@ -41,6 +45,10 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
 
     response = llm.invoke(messages)
     return response.content
+
+
+def load_db_engine():
+    return create_engine(config.PSQL_URL)
 
 
 def load_vector_stores(embeddings):
@@ -107,11 +115,12 @@ def get_journal_entries_with_similar(
     return [entry for entry in entries if entry[1] <= threshold]
 
 
-def get_journal_entries(
-    journal_store, anchor: str, date=datetime.now().strftime("%Y-%m-%d"), k=5
-):
-    # todo
-    pass
+def get_wise_documents(engine):
+    with engine.connect() as connection:
+        result = connection.execute(
+            text("SELECT DISTINCT cmetadata->>'source' FROM langchain_pg_embedding")
+        ).fetchall()
+    return [row[0] for row in result if row[0]]
 
 
 # Functions to display citations
@@ -120,20 +129,29 @@ def embedding_paragraph(paragrph: str, embeddings_model) -> np.ndarray:
     return np.array(embedding).reshape(1, -1)
 
 
-def calculate_semantic_similarity(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+def calculate_semantic_similarity(
+    embedding1: np.ndarray, embedding2: np.ndarray
+) -> float:
     # Calculate cosine similarity
     similarity_score = cosine_similarity(embedding1, embedding2)[0][0]
     return similarity_score
 
-def display_top_n_citations(context: List[Document], llm_response: str, embeddings: FireworksEmbeddings, n: int):
+
+def display_top_n_citations(
+    context: List[Document], llm_response: str, embeddings: FireworksEmbeddings, n: int
+):
     llm_response_embedding = embedding_paragraph(llm_response, embeddings)
 
     similarity_scores = []
     for idx, doc in enumerate(context):
         doc_content = doc.page_content[:1000]
         doc_embedding = embedding_paragraph(doc_content, embeddings)
-        similarity_score = calculate_semantic_similarity(llm_response_embedding, doc_embedding)
+        similarity_score = calculate_semantic_similarity(
+            llm_response_embedding, doc_embedding
+        )
         similarity_scores.append([idx, similarity_score, doc_content])
-        sorted_similarity_scores = sorted(similarity_scores, key= lambda x: x[1], reverse=True)
+        sorted_similarity_scores = sorted(
+            similarity_scores, key=lambda x: x[1], reverse=True
+        )
     top_n_citations = sorted_similarity_scores[:n]
     return [citation[2] for citation in top_n_citations]

@@ -3,10 +3,8 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
-from langchain import hub
-
-import config
 import utils
+import os
 
 
 def display_past_entries(entries):
@@ -38,9 +36,8 @@ if arguments:
 
 
 llm, embeddings = utils.setup_models()
-# load wise store and journal store
 wise_store, journal_store = utils.load_vector_stores(embeddings)
-prompt = hub.pull(config.PROMPT)
+db_engine = utils.load_db_engine()
 
 st.title("📝 Your Wise Friend Journal")
 # Add a new journal entry
@@ -60,7 +57,7 @@ if st.button("Reflect"):
         retrieved_docs = utils.retrieve(content, wise_store) if not dry_run else []
         print(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
         response = (
-            utils.generate(content, retrieved_docs, llm, prompt) if not dry_run else ""
+            utils.generate(content, retrieved_docs, llm, utils.prompt) if not dry_run else ""
         )
         top_citations = utils.display_top_n_citations(retrieved_docs, response, embeddings, n=2) if not dry_run else ""
         
@@ -83,13 +80,22 @@ if st.button("Reflect"):
     else:
         st.error("Please enter some content.")
 
-# Sidebar : Upload a document to add to the wise store
-uploaded_file = st.sidebar.file_uploader(
-    "Add to your wise friends", type=["txt", "pdf"]
-)
-if uploaded_file is not None:
-    file_path = f"./{uploaded_file.name}"
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    utils.add_wise_entry(wise_store, file_path)
-    st.success("Wise friend added!")
+# Sidebar: Upload a document to add to the wise store
+with st.sidebar:
+    uploaded_file = st.file_uploader("Add to your wise friends", type=["txt", "pdf"])
+    titles = utils.get_wise_documents(db_engine)
+    if titles:
+        with st.expander("Your collections"):
+            for title in titles:
+                st.markdown(f"- {title}")
+
+    if uploaded_file is not None:
+        file_path = f"/tmp/{uploaded_file.name}"
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        utils.add_wise_entry(wise_store, file_path)
+        st.success("Wise friend added!")
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            print(f"Error removing {file_path}: {e}")
