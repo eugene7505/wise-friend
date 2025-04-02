@@ -14,12 +14,8 @@ https://github.com/user-attachments/assets/137b8a3e-2df1-4c41-8317-ed16139fbd73
 
 ## Start the application
 * open `start.sh` and fill your API keys
-* `sh start.sh`. For dry-run (avoid making external calls, which costs money), `sh start.sh dry-run`
+* `sh start.sh`
 
 # Debug
 * To connect to the vectore store
 `psql -h localhost -p 6024 -U langchain -d langchain` (password: langchain)
-* To get all tables in the database
-`\dt`
-* To get table schema for a table
-`\d {table_name};`

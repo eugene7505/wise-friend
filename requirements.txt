@@ -9,5 +9,3 @@ langchain
 pandas
 datetime
 pre-commit
-scikit-learn
-pymupdf
