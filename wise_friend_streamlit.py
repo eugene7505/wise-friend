@@ -110,7 +110,7 @@ with st.sidebar:
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
         utils.add_wise_entry(wise_store, file_path)
-        utils.log_wise_entry(
+        utils.log_entry(
             log_table,
             file_path.split("/")[-1],
             date,

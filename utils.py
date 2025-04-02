@@ -96,7 +96,7 @@ def setup_models():
     return llm, embeddings
 
 
-def log_wise_entry(log_table, content, date, category, engine):
+def log_entry(log_table, content, date, category, engine):
     query = insert(log_table).values(content=content, date=date, category=category)
     with engine.connect() as conn:
         conn.execute(query)
