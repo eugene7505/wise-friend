@@ -1,4 +1,8 @@
-CHAT_MODEL = "accounts/fireworks/models/llama-v3p2-3b-instruct"
+# Description: Configuration file for the project
+
+# Fireworks model description:
+# https://fireworks.ai/models/fireworks/llama-v3p1-8b-instruct
+CHAT_MODEL = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 EMBEDDINGS_MODEL = "nomic-ai/nomic-embed-text-v1.5"
 WISE_COLLECTION = "wise_friend"
 JOURNAL_COLLECTION = "journal"
