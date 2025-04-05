@@ -8,6 +8,9 @@ import config
 import utils
 import os
 
+from langsmith import Client
+client = Client()
+
 
 def display_past_entries(entries):
     st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
@@ -70,7 +73,7 @@ if st.button("Reflect"):
         # wise responses
         retrieved_docs = utils.retrieve(content, wise_store) if not dry_run else []
         print(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
-        response = (
+        response, response_run_id = (
             utils.generate(content, retrieved_docs, llm, utils.prompt)
             if not dry_run
             else ""
@@ -87,6 +90,25 @@ if st.button("Reflect"):
         st.header("Wise Friend Response")
         with st.chat_message("ai", avatar="🧠"):
             st.markdown(f"**Wise Friend:**  \n\n*{response}*")
+            st.markdown(response_run_id)
+
+            sentiment_mapping = [":material/thumb_down:", ":material/thumb_up:"]
+            def log_user_feedback():
+                    client.create_feedback(
+                        response_run_id,
+                        key="feedback-key",
+                        score=selected,
+                        # comment="comment", # TODO: add open text box for comment
+                        )
+            selected = st.feedback("thumbs", on_change = log_user_feedback)
+            
+            if selected is not None:
+                client.create_feedback(
+                    response_run_id,
+                    key="feedback-key",
+                    score=selected,
+                    # comment="comment", # TODO: add open text box for comment
+                    )
             display_reference(top_citations)
 
         # Retrieve relevant journal entries

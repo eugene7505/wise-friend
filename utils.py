@@ -10,6 +10,11 @@ from langchain_core.messages import SystemMessage
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+# Import Langsmith for user feedback collection
+from langsmith import traceable
+from langsmith.run_helpers import get_current_run_tree
+
+
 from typing_extensions import List
 from sqlalchemy import text, insert, Table, MetaData, Sequence, Column, Integer, String
 import config
@@ -35,7 +40,7 @@ def retrieve(query: str, vector_store: VectorStore):
     retrieved_docs = vector_store.similarity_search(query)
     return retrieved_docs
 
-
+@traceable
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
     base_messages = prompt.invoke(
@@ -47,9 +52,10 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     )
 
     messages = [supportive_message] + base_messages
-
+    run = get_current_run_tree()
+    print(f"generate Run Id: {run.id}")
     response = llm.invoke(messages)
-    return response.content
+    return response.content, run.id
 
 
 def load_vector_stores(embeddings):
