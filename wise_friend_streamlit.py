@@ -9,8 +9,41 @@ import utils
 import os
 
 from langsmith import Client
+# Initialize the Langsmith client
 client = Client()
 
+# Initialize Streamlit session state
+# if "jornal_entry" not in st.session_state:
+#     st.session_state.journal_entry = ""
+if "llm_response" not in st.session_state:
+    st.session_state.llm_response = ""
+if "get_feedback" not in st.session_state:
+    st.session_state.get_feedback = False
+
+
+def log_user_feedback():
+    client.create_feedback(
+        st.session_state.response_run_id,
+        key="feedback-key",
+        score=st.session_state.user_feedback,
+        # comment="comment", # TODO: add open text box for comment
+        )
+    st.session_state.get_feedback = False
+    display_journel_entry(st.session_state.journal_entry)
+    display_wise_response(st.session_state.llm_response, st.session_state.response_run_id)
+    display_reference(st.session_state.top_citations)
+    display_past_entries(st.session_state.entries)
+
+def display_journel_entry(entry):
+    st.header(f"Journal Entry {date}")
+    with st.chat_message("user", avatar="✍️"):
+        st.markdown(f"**Journal Entry:**  \n\n*{entry}*")
+
+def display_wise_response(llm_response, response_run_id):
+    st.header("Wise Friend Response")
+    with st.chat_message("ai", avatar="🧠"):
+        st.markdown(f"**Wise Friend:**  \n\n*{llm_response}*")
+        st.markdown(response_run_id)
 
 def display_past_entries(entries):
     st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
@@ -61,8 +94,7 @@ st.title("📝 Your Wise Friend Journal")
 st.header("How are you feeling today?")
 # User input for journal entry
 date = str(st.date_input("Date", value=datetime.today()))
-content = st.text_area("Journal entry", "")
-
+content = st.text_area("Journal entry", "", key = "journal_entry")
 
 if st.button("Reflect"):
     # Store journal entry to the journal_store
@@ -73,52 +105,43 @@ if st.button("Reflect"):
         # wise responses
         retrieved_docs = utils.retrieve(content, wise_store) if not dry_run else []
         print(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
-        response, response_run_id = (
+        st.session_state.llm_response, st.session_state.response_run_id = (
             utils.generate(content, retrieved_docs, llm, utils.prompt)
             if not dry_run
-            else ""
+            else ("", "00000")
         )
-        top_citations = (
-            utils.display_top_n_citations(retrieved_docs, response, embeddings, n=2)
+        st.session_state.top_citations = (
+            utils.display_top_n_citations(retrieved_docs, st.session_state.llm_response, embeddings, n=2)
             if not dry_run
             else ""
         )
+        display_journel_entry(st.session_state.journal_entry)
+        # st.header(f"Journal Entry {date}")
+        # with st.chat_message("user", avatar="✍️"):
+        #     st.markdown(f"**Journal Entry:**  \n\n*{st.session_state.journal_entry}*")
+        display_wise_response(st.session_state.llm_response, st.session_state.response_run_id)
+        st.session_state.get_feedback = True
+        # st.header("Wise Friend Response")
+        # with st.chat_message("ai", avatar="🧠"):
+        #     st.markdown(f"**Wise Friend:**  \n\n*{st.session_state.llm_response}*")
+        #     st.markdown(response_run_id)
+        #     st.session_state.get_feedback = True
 
-        st.header(f"Journal Entry {date}")
-        with st.chat_message("user", avatar="✍️"):
-            st.markdown(f"**Journal Entry:**  \n\n*{content}*")
-        st.header("Wise Friend Response")
-        with st.chat_message("ai", avatar="🧠"):
-            st.markdown(f"**Wise Friend:**  \n\n*{response}*")
-            st.markdown(response_run_id)
-
-            sentiment_mapping = [":material/thumb_down:", ":material/thumb_up:"]
-            def log_user_feedback():
-                    client.create_feedback(
-                        response_run_id,
-                        key="feedback-key",
-                        score=selected,
-                        # comment="comment", # TODO: add open text box for comment
-                        )
-            selected = st.feedback("thumbs", on_change = log_user_feedback)
+        if st.session_state.get_feedback:                    
+            st.feedback(options = "thumbs",
+                        key = "user_feedback", 
+                        on_change = log_user_feedback)
             
-            if selected is not None:
-                client.create_feedback(
-                    response_run_id,
-                    key="feedback-key",
-                    score=selected,
-                    # comment="comment", # TODO: add open text box for comment
-                    )
-            display_reference(top_citations)
+        display_reference(st.session_state.top_citations)
 
         # Retrieve relevant journal entries
-        entries = (
+        st.session_state.entries = (
             utils.get_journal_entries_with_similar(journal_store, content)
             if not dry_run
             else []
         )
-        print(f"Retrieved {len(entries)} entries from the journal")
-        display_past_entries(entries)
+        print(f"Retrieved {len(st.session_state.entries)} entries from the journal")
+        display_past_entries(st.session_state.entries)
     else:
         st.error("Please enter some content.")
 
