@@ -14,7 +14,7 @@ from langsmith import Client
 client = Client()
 
 # Initialize Streamlit session state to manage the app's state across runs
-if "jornal_entry" not in st.session_state:
+if "journal_entry" not in st.session_state:
     st.session_state.journal_entry = ""
 if "llm_response" not in st.session_state:
     st.session_state.llm_response = ""
@@ -52,16 +52,15 @@ def log_user_feedback():
 
 # Function to display necessary information on the frondend including
 # the journal entry, wise response, reference, past entries and wise collection.
-def display_journel_entry(entry, date):
+def display_journal_entry(entry, date):
     st.header(f"Journal Entry {date}")
     with st.chat_message("user", avatar="✍️"):
         st.markdown(f"**Journal Entry:**  \n\n*{entry}*")
 
-def display_wise_response(llm_response, response_run_id):
+def display_wise_response(llm_response):
     st.header("Wise Friend Response")
     with st.chat_message("ai", avatar="🧠"):
         st.markdown(f"**Wise Friend:**  \n\n*{llm_response}*")
-        st.markdown(response_run_id)
 
 def display_reference(top_citations):
     with st.expander("**References**"):
@@ -135,8 +134,8 @@ if st.session_state.stage == 1:
             if not dry_run
             else ""
         )
-        display_journel_entry(st.session_state.journal_entry, st.session_state.date)
-        display_wise_response(st.session_state.llm_response, st.session_state.response_run_id)
+        display_journal_entry(st.session_state.journal_entry, st.session_state.date)
+        display_wise_response(st.session_state.llm_response)
         display_feedback_button()            
         display_reference(st.session_state.top_citations)
 
@@ -153,8 +152,8 @@ if st.session_state.stage == 1:
 
 # Display wise
 if st.session_state.stage == 2:
-    display_journel_entry(st.session_state.journal_entry, st.session_state.date)
-    display_wise_response(st.session_state.llm_response, st.session_state.response_run_id)
+    display_journal_entry(st.session_state.journal_entry, st.session_state.date)
+    display_wise_response(st.session_state.llm_response)
     display_feedback_button()            
     display_reference(st.session_state.top_citations)
     display_past_entries(st.session_state.entries)
