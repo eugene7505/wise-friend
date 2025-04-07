@@ -9,7 +9,8 @@ import utils
 import os
 
 from langsmith import Client
-# Initialize the Langsmith client
+
+# Initialize the Langsmith client for logging user feedback
 client = Client()
 
 # Initialize Streamlit session state to manage the app's state across runs
@@ -20,13 +21,13 @@ if "llm_response" not in st.session_state:
 if 'stage' not in st.session_state:
     st.session_state.stage = 0
 
-# Set the state of app
+# Function to set the state of app to control the interface flow.
+# The app has three stages:
 # 0: Enter journal entry
 # 1: Generate & display wise response by making LLM call
 # 2: Display wise response after user submits feedback by clicking the feedback button
 def set_state(i):
     st.session_state.stage = i
-    st.session_state.user_input = st.session_state.journal_entry
 
 # Function to display feedback button under the wise response
 def display_feedback_button():
@@ -38,15 +39,19 @@ def display_feedback_button():
 # This function is called when the user clicks the feedback button
 # It logs the feedback score (0: thumbs down, 1: thumbs up) and the comment (if any) to Langsmith
 def log_user_feedback():
-    client.create_feedback(
-        st.session_state.response_run_id,
-        key="feedback-key",
-        score=st.session_state.user_feedback,
-        # comment="comment", # TODO: add open text box for comment
-        )
-    st.session_state.get_feedback = False
+    if not dry_run:
+        client.create_feedback(
+            st.session_state.response_run_id,
+            key="feedback-key",
+            score=st.session_state.user_feedback,
+            # comment="comment", # TODO: add open text box for user comment
+            )
+    else:
+        st.toast("Feedback logged in dry-run mode.")
     set_state(2)
 
+# Function to display necessary information on the frondend including
+# the journal entry, wise response, reference, past entries and wise collection.
 def display_journel_entry(entry, date):
     st.header(f"Journal Entry {date}")
     with st.chat_message("user", avatar="✍️"):
@@ -58,16 +63,6 @@ def display_wise_response(llm_response, response_run_id):
         st.markdown(f"**Wise Friend:**  \n\n*{llm_response}*")
         st.markdown(response_run_id)
 
-def display_past_entries(entries):
-    st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
-
-    dates = [entry[0].metadata["date"] for entry in entries]
-    entries = [entry[0].page_content for entry in entries]
-    data = {"Dates": dates, "Entries": entries}
-    df = pd.DataFrame(data)
-    st.dataframe(df)
-
-
 def display_reference(top_citations):
     with st.expander("**References**"):
         # st.markdown(f"**Reference:**  \n\n*{top_citations}*")
@@ -77,6 +72,14 @@ def display_reference(top_citations):
             st.markdown(clean_text, unsafe_allow_html=True)
             st.markdown("---")
 
+def display_past_entries(entries):
+    st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
+
+    dates = [entry[0].metadata["date"] for entry in entries]
+    entries = [entry[0].page_content for entry in entries]
+    data = {"Dates": dates, "Entries": entries}
+    df = pd.DataFrame(data)
+    st.dataframe(df)
 
 def display_wise_collections(entries):
     docs = [entry[0] for entry in entries]
@@ -102,15 +105,17 @@ wise_store, journal_store = utils.load_vector_stores(embeddings)
 db_engine = create_engine(config.PSQL_URL)
 log_table = utils.create_log_table(db_engine)
 
+# Default view for the app for users to enter their journal entry
 if st.session_state.stage >= 0:
     st.title("📝 Your Wise Friend Journal")
     # Add a new journal entry
     st.header("How are you feeling today?")
     # User input for journal entry
-    date = st.date_input("Date", value=datetime.today())
+    st.session_state.date = str(st.date_input("Date", value=datetime.today()))
     st.session_state.journal_entry = st.text_area("Journal entry", st.session_state.journal_entry) 
     st.button("Reflect", on_click=set_state, args=[1])
 
+# Store the journal entry and generate wise response once the user clicks the "Reflect" button
 if st.session_state.stage == 1:
     # Store journal entry to the journal_store
     if st.session_state.journal_entry:
@@ -123,7 +128,7 @@ if st.session_state.stage == 1:
         st.session_state.llm_response, st.session_state.response_run_id = (
             utils.generate(st.session_state.journal_entry, retrieved_docs, llm, utils.prompt)
             if not dry_run
-            else ("", "00000")
+            else ("", "0000") # for test purpose
         )
         st.session_state.top_citations = (
             utils.display_top_n_citations(retrieved_docs, st.session_state.llm_response, embeddings, n=2)
@@ -146,6 +151,7 @@ if st.session_state.stage == 1:
     else:
         st.error("Please enter some content.")
 
+# Display wise
 if st.session_state.stage == 2:
     display_journel_entry(st.session_state.journal_entry, st.session_state.date)
     display_wise_response(st.session_state.llm_response, st.session_state.response_run_id)
@@ -166,7 +172,7 @@ with st.sidebar:
         utils.log_entry(
             log_table,
             file_path.split("/")[-1],
-            date,
+            st.session_state.date,
             utils.Category.DOCUMENT.value,
             db_engine,
         )
