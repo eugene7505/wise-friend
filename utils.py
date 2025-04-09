@@ -38,7 +38,9 @@ def retrieve(query: str, vector_store: VectorStore):
 
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
-    base_messages = prompt.invoke({"question": query, "context": docs_content, "history": None}).to_messages()
+    base_messages = prompt.invoke(
+        {"question": query, "context": docs_content, "history": None}
+    ).to_messages()
     # Prepend the supportive system message
     supportive_message = SystemMessage(
         content="You are a wise, supportive inner voice. Offer empathetic, gentle guidance using provided context to replace self-criticism with empowering insights or new perspectives."
@@ -137,12 +139,12 @@ def get_journal_entries(engine, k=5):
     with engine.connect() as connection:
         result = connection.execute(
             text(
-            f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
-            f"JOIN langchain_pg_collection c "
-            f"ON e.collection_id = c.uuid "
-            f"WHERE c.name = '{config.JOURNAL_COLLECTION}' "
-            f"ORDER BY e.cmetadata->>'date' DESC "
-            f"LIMIT {k};"
+                f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
+                f"JOIN langchain_pg_collection c "
+                f"ON e.collection_id = c.uuid "
+                f"WHERE c.name = '{config.JOURNAL_COLLECTION}' "
+                f"ORDER BY e.cmetadata->>'date' DESC "
+                f"LIMIT {k};"
             )
         ).fetchall()
     return result
