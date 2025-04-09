@@ -38,9 +38,7 @@ def retrieve(query: str, vector_store: VectorStore):
 
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
-    base_messages = prompt.invoke(
-        {"question": query, "context": docs_content, "history": None}
-    ).to_messages()
+    base_messages = prompt.invoke({"question": query, "context": docs_content, "history": None}).to_messages()
     # Prepend the supportive system message
     supportive_message = SystemMessage(
         content="You are a wise, supportive inner voice. Offer empathetic, gentle guidance using provided context to replace self-criticism with empowering insights or new perspectives."
