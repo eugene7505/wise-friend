@@ -139,11 +139,11 @@ def get_journal_entries(engine, k=5):
     with engine.connect() as connection:
         result = connection.execute(
             text(
-            f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e"
-            f"JOIN langchain_pg_collection c"
-            f"ON e.collection_id = c.uuid"
-            f"WHERE c.name = '{config.JOURNAL_COLLECTION}'"
-            f"ORDER BY e.cmetadata->>'date' DESC"
+            f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
+            f"JOIN langchain_pg_collection c "
+            f"ON e.collection_id = c.uuid "
+            f"WHERE c.name = '{config.JOURNAL_COLLECTION}' "
+            f"ORDER BY e.cmetadata->>'date' DESC "
             f"LIMIT {k};"
             )
         ).fetchall()
