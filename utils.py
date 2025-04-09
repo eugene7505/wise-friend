@@ -1,24 +1,24 @@
 import logging
+import re
 from datetime import datetime
+from enum import Enum
 
+import numpy as np
 from langchain import hub
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStore
 from langchain_core.messages import SystemMessage
-
+from langchain_core.vectorstores import VectorStore
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from typing_extensions import List
-from sqlalchemy import text, insert, Table, MetaData, Sequence, Column, Integer, String
-import config
-import re
-from enum import Enum
 
 # Calculate similarity score for citations
 from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+from sqlalchemy import text, insert, Table, MetaData, Sequence, Column, Integer, String
+from typing_extensions import List
+
+import config
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -126,17 +126,28 @@ def add_journal_entry(
     journal_store.add_texts([entry], metadatas=[{"date": date}])
 
 
-def get_journal_entries_with_similar(
-    journal_store,
-    anchor: str,
-    date=datetime.now().strftime("%Y-%m-%d"),
-    threshold=0.3,
-    k=5,
-):
-    entries = journal_store.similarity_search_with_score(
-        anchor, k=k, filter={"date": {"$gte": date}}
-    )
-    return [entry for entry in entries if entry[1] <= threshold]
+def get_journal_entries_with_similar(journal_store, anchor: str, threshold=0.3, k=5):
+    entries = journal_store.similarity_search_with_score(anchor, k=k)
+    return [
+        (entry[0].page_content, entry[0].metadata["date"])
+        for entry in entries
+        if entry[1] <= threshold
+    ]
+
+
+def get_journal_entries(engine, k=5):
+    with engine.connect() as connection:
+        result = connection.execute(
+            text(
+            f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
+            f"JOIN langchain_pg_collection c "
+            f"ON e.collection_id = c.uuid "
+            f"WHERE c.name = '{config.JOURNAL_COLLECTION}' "
+            f"ORDER BY e.cmetadata->>'date' DESC "
+            f"LIMIT {k};"
+            )
+        ).fetchall()
+    return result
 
 
 def get_wise_documents(engine):
@@ -146,7 +157,8 @@ def get_wise_documents(engine):
                 f"SELECT content, date FROM log_table where category = '{Category.DOCUMENT.value}'"
             )
         ).fetchall()
-    return [row[:2] for row in result if row[0]]
+    # list of (content, date) tuples, filter out empty entries
+    return [row for row in result if row[0]]
 
 
 # Functions to display citations
@@ -164,7 +176,10 @@ def calculate_semantic_similarity(
 
 
 def display_top_n_citations(
-    context: List[Document], llm_response: str, embeddings: FireworksEmbeddings, n: int
+    context: List[Document],
+    llm_response: str,
+    embeddings: FireworksEmbeddings,
+    n: int,
 ):
     llm_response_embedding = embedding_paragraph(llm_response, embeddings)
 

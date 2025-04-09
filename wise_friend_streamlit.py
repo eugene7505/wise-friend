@@ -1,22 +1,13 @@
+import os
 import sys
 from datetime import datetime
 
 import pandas as pd
 import streamlit as st
-from sqlalchemy import create_engine
-import config
 import utils
-import os
+from sqlalchemy import create_engine
 
-
-def display_past_entries(entries):
-    st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
-
-    dates = [entry[0].metadata["date"] for entry in entries]
-    entries = [entry[0].page_content for entry in entries]
-    data = {"Dates": dates, "Entries": entries}
-    df = pd.DataFrame(data)
-    st.dataframe(df)
+import config
 
 
 def display_reference(top_citations):
@@ -29,13 +20,9 @@ def display_reference(top_citations):
             st.markdown("---")
 
 
-def display_wise_collections(entries):
-    docs = [entry[0] for entry in entries]
-    dates = [entry[1] for entry in entries]
-    print(entries)
-    data = {"Date added": dates, "Document": docs}
-    df = pd.DataFrame(data)
-    st.dataframe(df[["Document", "Date added"]], hide_index=True)
+def display_entries(entries):
+    df = pd.DataFrame(entries, columns=["Entry", "Date"])
+    st.dataframe(df, hide_index=True)
 
 
 ### Streamlit interface
@@ -90,13 +77,10 @@ if st.button("Reflect"):
             display_reference(top_citations)
 
         # Retrieve relevant journal entries
-        entries = (
-            utils.get_journal_entries_with_similar(journal_store, content)
-            if not dry_run
-            else []
-        )
+        entries = utils.get_journal_entries(db_engine) if not dry_run else []
         print(f"Retrieved {len(entries)} entries from the journal")
-        display_past_entries(entries)
+        st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
+        display_entries(entries)
     else:
         st.error("Please enter some content.")
 
@@ -104,7 +88,7 @@ if st.button("Reflect"):
 with st.sidebar:
     uploaded_file = st.file_uploader("Add to your wise friends", type=["txt", "pdf"])
     with st.expander("📚 Your collections"):
-        display_wise_collections(utils.get_wise_documents(db_engine))
+        display_entries(utils.get_wise_documents(db_engine))
     if uploaded_file is not None:
         file_path = f"/tmp/{uploaded_file.name}"
         with open(file_path, "wb") as f:
