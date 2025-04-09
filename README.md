@@ -7,8 +7,8 @@ https://github.com/user-attachments/assets/137b8a3e-2df1-4c41-8317-ed16139fbd73
 `conda create --name wisefriend` `conda activate wisefriend`
 
 ## Install dependencies
-* `conda install pip`
-* python dependencies `cd wise-friend` `pip install -r requirements.txt`
+* `conda install pip && cd wise-friend && pip install -r requirements.txt`
+* precommit `pre-commit install`
 * install postgres `conda install -y -c conda-forge postgresql`
 * run the postgres docker container `docker run --name pgvector-container -e POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16` (ensure to install docker)
 
