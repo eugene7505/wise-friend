@@ -55,7 +55,9 @@ if st.button("Reflect"):
         st.success("Entry added!")
 
         # wise responses
-        retrieved_docs = utils.retrieve(content, wise_store) if not dry_run else []
+        retrieved_docs = (
+            utils.retrieve(content, wise_store) if not dry_run else []
+        )
         print(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
         response = (
             utils.generate(content, retrieved_docs, llm, utils.prompt)
@@ -63,7 +65,9 @@ if st.button("Reflect"):
             else ""
         )
         top_citations = (
-            utils.display_top_n_citations(retrieved_docs, response, embeddings, n=2)
+            utils.display_top_n_citations(
+                retrieved_docs, response, embeddings, n=2
+            )
             if not dry_run
             else ""
         )
@@ -86,7 +90,9 @@ if st.button("Reflect"):
 
 # Sidebar: Upload a document to add to the wise store
 with st.sidebar:
-    uploaded_file = st.file_uploader("Add to your wise friends", type=["txt", "pdf"])
+    uploaded_file = st.file_uploader(
+        "Add to your wise friends", type=["txt", "pdf"]
+    )
     with st.expander("📚 Your collections"):
         display_entries(utils.get_wise_documents(db_engine))
     if uploaded_file is not None:

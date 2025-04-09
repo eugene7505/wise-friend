@@ -15,7 +15,16 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Calculate similarity score for citations
 from sklearn.metrics.pairwise import cosine_similarity
-from sqlalchemy import text, insert, Table, MetaData, Sequence, Column, Integer, String
+from sqlalchemy import (
+    Column,
+    Integer,
+    MetaData,
+    Sequence,
+    String,
+    Table,
+    insert,
+    text,
+)
 from typing_extensions import List
 
 import config
@@ -73,7 +82,9 @@ def create_log_table(engine):
     log_table = Table(
         "log_table",
         metadata,
-        Column("id", Integer, Sequence("some_id_seq", start=1), primary_key=True),
+        Column(
+            "id", Integer, Sequence("some_id_seq", start=1), primary_key=True
+        ),
         Column("content", String, nullable=False),
         Column("date", String, nullable=False),
         Column("category", String, nullable=False),
@@ -97,7 +108,9 @@ def setup_models():
 
 
 def log_entry(log_table, content, date, category, engine):
-    query = insert(log_table).values(content=content, date=date, category=category)
+    query = insert(log_table).values(
+        content=content, date=date, category=category
+    )
     with engine.connect() as conn:
         conn.execute(query)
         conn.commit()
@@ -112,7 +125,9 @@ def add_wise_entry(wise_store, file_path: str):
 
     # RecursiveCharacterTextSplitter allows you to split based on sentence boundaries,
     # and then split the sentences into chunks of a certain size, if the sentence is too long.
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1500, chunk_overlap=200
+    )
     all_splits = text_splitter.split_documents(docs)
     batch_size = 200
     for i in range(0, len(all_splits), batch_size):
@@ -126,7 +141,12 @@ def add_journal_entry(
     journal_store.add_texts([entry], metadatas=[{"date": date}])
 
 
-def get_journal_entries_with_similar(journal_store, anchor: str, threshold=0.3, k=5):
+def get_journal_entries_with_similar(
+    journal_store,
+    anchor: str,
+    threshold=0.3,
+    k=5,
+):
     entries = journal_store.similarity_search_with_score(anchor, k=k)
     return [
         (entry[0].page_content, entry[0].metadata["date"])
@@ -135,16 +155,14 @@ def get_journal_entries_with_similar(journal_store, anchor: str, threshold=0.3, 
     ]
 
 
-def get_journal_entries(engine, k=5):
+def get_journal_entries(
+    engine,
+    k=5,
+):
     with engine.connect() as connection:
         result = connection.execute(
             text(
-            f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e"
-            f"JOIN langchain_pg_collection c"
-            f"ON e.collection_id = c.uuid"
-            f"WHERE c.name = '{config.JOURNAL_COLLECTION}'"
-            f"ORDER BY e.cmetadata->>'date' DESC"
-            f"LIMIT {k};"
+                f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e JOIN langchain_pg_collection c ON e.collection_id = c.uuid WHERE c.name = '{config.JOURNAL_COLLECTION}' order by e.cmetadata->>'date' desc limit {k};"
             )
         ).fetchall()
     return result
@@ -157,8 +175,9 @@ def get_wise_documents(engine):
                 f"SELECT content, date FROM log_table where category = '{Category.DOCUMENT.value}'"
             )
         ).fetchall()
-    # list of (content, date) tuples, filter out empty entries
-    return [row for row in result if row[0]]
+    return [
+        row for row in result if row[0]
+    ]  # list of (content, date) tuples, filter out empty entries
 
 
 # Functions to display citations
