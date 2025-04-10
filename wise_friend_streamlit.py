@@ -18,8 +18,9 @@ if "journal_entry" not in st.session_state:
     st.session_state.journal_entry = ""
 if "llm_response" not in st.session_state:
     st.session_state.llm_response = ""
-if 'stage' not in st.session_state:
+if "stage" not in st.session_state:
     st.session_state.stage = 0
+
 
 # Function to set the state of app to control the interface flow.
 # The app has three stages:
@@ -29,12 +30,12 @@ if 'stage' not in st.session_state:
 def set_state(i):
     st.session_state.stage = i
 
+
 # Function to display feedback button under the wise response
 def display_feedback_button():
-    st.feedback(options = "thumbs",
-                key = "user_feedback", 
-                on_change = log_user_feedback)
-    
+    st.feedback(options="thumbs", key="user_feedback", on_change=log_user_feedback)
+
+
 # Function to log user feedback to Langsmith
 # This function is called when the user clicks the feedback button
 # It logs the feedback score (0: thumbs down, 1: thumbs up) and the comment (if any) to Langsmith
@@ -45,10 +46,11 @@ def log_user_feedback():
             key="feedback-key",
             score=st.session_state.user_feedback,
             # comment="comment", # TODO: add open text box for user comment
-            )
+        )
     else:
         st.toast("Feedback logged in dry-run mode.")
     set_state(2)
+
 
 # Function to display necessary information on the frondend including
 # the journal entry, wise response, reference, past entries and wise collection.
@@ -57,10 +59,13 @@ def display_journal_entry(entry, date):
     with st.chat_message("user", avatar="✍️"):
         st.markdown(f"**Journal Entry:**  \n\n*{entry}*")
 
+
 def display_wise_response(llm_response):
     st.header("Wise Friend Response")
     with st.chat_message("ai", avatar="🧠"):
         st.markdown(f"**Wise Friend:**  \n\n*{llm_response}*")
+        display_feedback_button()
+
 
 def display_reference(top_citations):
     with st.expander("**References**"):
@@ -71,6 +76,7 @@ def display_reference(top_citations):
             st.markdown(clean_text, unsafe_allow_html=True)
             st.markdown("---")
 
+
 def display_past_entries(entries):
     st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
 
@@ -79,6 +85,7 @@ def display_past_entries(entries):
     data = {"Dates": dates, "Entries": entries}
     df = pd.DataFrame(data)
     st.dataframe(df)
+
 
 def display_wise_collections(entries):
     docs = [entry[0] for entry in entries]
@@ -111,37 +118,50 @@ if st.session_state.stage >= 0:
     st.header("How are you feeling today?")
     # User input for journal entry
     st.session_state.date = str(st.date_input("Date", value=datetime.today()))
-    st.session_state.journal_entry = st.text_area("Journal entry", st.session_state.journal_entry) 
+    st.session_state.journal_entry = st.text_area(
+        "Journal entry", st.session_state.journal_entry
+    )
     st.button("Reflect", on_click=set_state, args=[1])
 
 # Store the journal entry and generate wise response once the user clicks the "Reflect" button
 if st.session_state.stage == 1:
     # Store journal entry to the journal_store
     if st.session_state.journal_entry:
-        utils.add_journal_entry(journal_store, st.session_state.journal_entry, st.session_state.date)
+        utils.add_journal_entry(
+            journal_store, st.session_state.journal_entry, st.session_state.date
+        )
         st.success("Entry added!")
 
         # wise responses
-        retrieved_docs = utils.retrieve(st.session_state.journal_entry, wise_store) if not dry_run else []
+        retrieved_docs = (
+            utils.retrieve(st.session_state.journal_entry, wise_store)
+            if not dry_run
+            else []
+        )
         print(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
         st.session_state.llm_response, st.session_state.response_run_id = (
-            utils.generate(st.session_state.journal_entry, retrieved_docs, llm, utils.prompt)
+            utils.generate(
+                st.session_state.journal_entry, retrieved_docs, llm, utils.prompt
+            )
             if not dry_run
-            else ("", "0000") # for test purpose
+            else ("", "0000")  # for test purpose
         )
         st.session_state.top_citations = (
-            utils.display_top_n_citations(retrieved_docs, st.session_state.llm_response, embeddings, n=2)
+            utils.display_top_n_citations(
+                retrieved_docs, st.session_state.llm_response, embeddings, n=2
+            )
             if not dry_run
             else ""
         )
         display_journal_entry(st.session_state.journal_entry, st.session_state.date)
         display_wise_response(st.session_state.llm_response)
-        display_feedback_button()            
         display_reference(st.session_state.top_citations)
 
         # Retrieve relevant journal entries
         st.session_state.entries = (
-            utils.get_journal_entries_with_similar(journal_store, st.session_state.journal_entry)
+            utils.get_journal_entries_with_similar(
+                journal_store, st.session_state.journal_entry
+            )
             if not dry_run
             else []
         )
@@ -154,7 +174,6 @@ if st.session_state.stage == 1:
 if st.session_state.stage == 2:
     display_journal_entry(st.session_state.journal_entry, st.session_state.date)
     display_wise_response(st.session_state.llm_response)
-    display_feedback_button()            
     display_reference(st.session_state.top_citations)
     display_past_entries(st.session_state.entries)
 
