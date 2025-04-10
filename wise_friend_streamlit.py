@@ -112,16 +112,15 @@ db_engine = create_engine(config.PSQL_URL)
 log_table = utils.create_log_table(db_engine)
 
 # Default view for the app for users to enter their journal entry
-if st.session_state.stage >= 0:
-    st.title("📝 Your Wise Friend Journal")
-    # Add a new journal entry
-    st.header("How are you feeling today?")
-    # User input for journal entry
-    st.session_state.date = str(st.date_input("Date", value=datetime.today()))
-    st.session_state.journal_entry = st.text_area(
-        "Journal entry", st.session_state.journal_entry
-    )
-    st.button("Reflect", on_click=set_state, args=[1])
+st.title("📝 Your Wise Friend Journal")
+# Add a new journal entry
+st.header("How are you feeling today?")
+# User input for journal entry
+st.session_state.date = str(st.date_input("Date", value=datetime.today()))
+st.session_state.journal_entry = st.text_area(
+    "Journal entry", st.session_state.journal_entry
+)
+st.button("Reflect", on_click=set_state, args=[1])
 
 # Store the journal entry and generate wise response once the user clicks the "Reflect" button
 if st.session_state.stage == 1:
@@ -153,7 +152,6 @@ if st.session_state.stage == 1:
             if not dry_run
             else ""
         )
-        display_journal_entry(st.session_state.journal_entry, st.session_state.date)
         display_wise_response(st.session_state.llm_response)
         display_reference(st.session_state.top_citations)
 
@@ -172,7 +170,6 @@ if st.session_state.stage == 1:
 
 # Display wise
 if st.session_state.stage == 2:
-    display_journal_entry(st.session_state.journal_entry, st.session_state.date)
     display_wise_response(st.session_state.llm_response)
     display_reference(st.session_state.top_citations)
     display_past_entries(st.session_state.entries)
