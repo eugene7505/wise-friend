@@ -24,9 +24,8 @@ if "stage" not in st.session_state:
 
 # Function to set the state of app to control the interface flow.
 # The app has three stages:
-# 0: Enter journal entry
-# 1: Generate & display wise response by making LLM call
-# 2: Display wise response after user submits feedback by clicking the feedback button
+# 0: waiting for entry. We display previous responses if exist. Upon the "Reflect" button is clicked, we transition to stage 1.
+# 1: Generate & display wise response by making LLM call. Once added, then transition back to stage 0
 def set_state(i):
     st.session_state.stage = i
 
@@ -49,7 +48,7 @@ def log_user_feedback():
         )
     else:
         st.toast("Feedback logged in dry-run mode.")
-    set_state(2)
+    set_state(0)
 
 
 # Function to display necessary information on the frondend including
@@ -122,6 +121,11 @@ st.session_state.journal_entry = st.text_area(
 )
 st.button("Reflect", on_click=set_state, args=[1])
 
+if st.session_state.llm_response:
+    display_wise_response(st.session_state.llm_response)
+    display_reference(st.session_state.top_citations)
+    display_past_entries(st.session_state.entries)
+
 # Store the journal entry and generate wise response once the user clicks the "Reflect" button
 if st.session_state.stage == 1:
     # Store journal entry to the journal_store
@@ -168,11 +172,6 @@ if st.session_state.stage == 1:
     else:
         st.error("Please enter some content.")
 
-# Display wise
-if st.session_state.stage == 2:
-    display_wise_response(st.session_state.llm_response)
-    display_reference(st.session_state.top_citations)
-    display_past_entries(st.session_state.entries)
 
 # Sidebar: Upload a document to add to the wise store
 with st.sidebar:
