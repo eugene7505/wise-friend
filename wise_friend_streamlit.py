@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 
 import config
 
+from langsmith import Client
 import logging
 
 # Set up logging configuration
@@ -22,6 +23,61 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# Initialize the Langsmith client for logging user feedback
+client = Client()
+
+# Initialize Streamlit session state to manage the app's state across runs
+if "journal_entry" not in st.session_state:
+    st.session_state.journal_entry = ""
+if "llm_response" not in st.session_state:
+    st.session_state.llm_response = ""
+if "stage" not in st.session_state:
+    st.session_state.stage = 0
+
+
+# Function to set the state of app to control the interface flow.
+# The app has three stages:
+# 0: waiting for entry. We display previous responses if exist. Upon the "Reflect" button is clicked, we transition to stage 1.
+# 1: Generate & display wise response by making LLM call. Once added, then transition back to stage 0
+def set_state(i):
+    st.session_state.stage = i
+
+
+# Function to display feedback button under the wise response
+def display_feedback_button():
+    st.feedback(options="thumbs", key="user_feedback", on_change=log_user_feedback)
+
+
+# Function to log user feedback to Langsmith
+# This function is called when the user clicks the feedback button
+# It logs the feedback score (0: thumbs down, 1: thumbs up) and the comment (if any) to Langsmith
+def log_user_feedback():
+    if not dry_run:
+        client.create_feedback(
+            st.session_state.response_run_id,
+            key="feedback-key",
+            score=st.session_state.user_feedback,
+            # comment="comment", # TODO: add open text box for user comment
+        )
+    else:
+        st.toast("Feedback logged in dry-run mode.")
+    set_state(0)
+
+
+# Function to display necessary information on the frondend including
+# the journal entry, wise response, reference, past entries and wise collection.
+def display_journal_entry(entry, date):
+    st.header(f"Journal Entry {date}")
+    with st.chat_message("user", avatar="✍️"):
+        st.markdown(f"**Journal Entry:**  \n\n*{entry}*")
+
+
+def display_wise_response(llm_response):
+    st.header("Wise Friend Response")
+    with st.chat_message("ai", avatar="🧠"):
+        st.markdown(f"**Wise Friend:**  \n\n*{llm_response}*")
+        display_feedback_button()
 
 
 def display_reference(top_citations):
@@ -37,6 +93,15 @@ def display_reference(top_citations):
 def display_entries(entries):
     df = pd.DataFrame(entries, columns=["Entry", "Date"])
     st.dataframe(df, hide_index=True)
+
+
+def display_wise_collections(entries):
+    docs = [entry[0] for entry in entries]
+    dates = [entry[1] for entry in entries]
+    print(entries)
+    data = {"Date added": dates, "Document": docs}
+    df = pd.DataFrame(data)
+    st.dataframe(df[["Document", "Date added"]], hide_index=True)
 
 
 ### Streamlit interface
@@ -60,41 +125,54 @@ if "uploaded_file" not in st.session_state:
 if "wise_collection" not in st.session_state:
     st.session_state.wise_collection = utils.get_wise_documents(db_engine)
 
+# Default view for the app for users to enter their journal entry
 st.title("📝 Your Wise Friend Journal")
 # Add a new journal entry
 st.header("How are you feeling today?")
 # User input for journal entry
-date = str(st.date_input("Date", value=datetime.today()))
-content = st.text_area("Journal entry", "")
+st.session_state.date = str(st.date_input("Date", value=datetime.today()))
+st.session_state.journal_entry = st.text_area(
+    "Journal entry", st.session_state.journal_entry
+)
+st.button("Reflect", on_click=set_state, args=[1])
 
+if st.session_state.llm_response:
+    display_wise_response(st.session_state.llm_response)
+    display_reference(st.session_state.top_citations)
+    display_entries(st.session_state.entries)
 
-if st.button("Reflect"):
+# Store the journal entry and generate wise response once the user clicks the "Reflect" button
+if st.session_state.stage == 1:
     # Store journal entry to the journal_store
-    if content:
-        utils.add_journal_entry(journal_store, content, date)
+    if st.session_state.journal_entry:
+        utils.add_journal_entry(
+            journal_store, st.session_state.journal_entry, st.session_state.date
+        )
         st.success("Entry added!")
 
         # wise responses
-        retrieved_docs = utils.retrieve(content, wise_store) if not dry_run else []
+        retrieved_docs = (
+            utils.retrieve(st.session_state.journal_entry, wise_store)
+            if not dry_run
+            else []
+        )
         logger.info(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
-        response = (
-            utils.generate(content, retrieved_docs, llm, utils.prompt)
+        st.session_state.llm_response, st.session_state.response_run_id = (
+            utils.generate(
+                st.session_state.journal_entry, retrieved_docs, llm, utils.prompt
+            )
+            if not dry_run
+            else ("", "0000")  # for test purpose
+        )
+        st.session_state.top_citations = (
+            utils.display_top_n_citations(
+                retrieved_docs, st.session_state.llm_response, embeddings, n=2
+            )
             if not dry_run
             else ""
         )
-        top_citations = (
-            utils.display_top_n_citations(retrieved_docs, response, embeddings, n=2)
-            if not dry_run
-            else ""
-        )
-
-        st.header(f"Journal Entry {date}")
-        with st.chat_message("user", avatar="✍️"):
-            st.markdown(f"**Journal Entry:**  \n\n*{content}*")
-        st.header("Wise Friend Response")
-        with st.chat_message("ai", avatar="🧠"):
-            st.markdown(f"**Wise Friend:**  \n\n*{response}*")
-            display_reference(top_citations)
+        display_wise_response(st.session_state.llm_response)
+        display_reference(st.session_state.top_citations)
 
         # Retrieve relevant journal entries
         entries = utils.get_journal_entries(db_engine) if not dry_run else []
@@ -103,6 +181,7 @@ if st.button("Reflect"):
         display_entries(entries)
     else:
         st.error("Please enter some content.")
+
 
 # Sidebar: Upload a document to add to the wise store
 with st.sidebar:
@@ -122,13 +201,15 @@ with st.sidebar:
             utils.log_entry(
                 log_table,
                 file_path.split("/")[-1],
-                date,
+                st.session_state.date,
                 utils.Category.DOCUMENT.value,
                 db_engine,
             )
             st.success("Wise friend added!")
             # update states
-            st.session_state.wise_collection += [(uploaded_file.name, date)]
+            st.session_state.wise_collection += [
+                (uploaded_file.name, st.session_state.date)
+            ]
             logger.info(
                 f"Updating states: wise_collection = {st.session_state.wise_collection}, uploaded_file = {st.session_state.uploaded_file}"
             )
