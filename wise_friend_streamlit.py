@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 import utils
 from sqlalchemy import create_engine
+from streamlit_google_auth import Authenticate
 
 import config
 
@@ -95,14 +96,12 @@ def display_entries(entries):
     st.dataframe(df, hide_index=True)
 
 
-def display_wise_collections(entries):
-    docs = [entry[0] for entry in entries]
-    dates = [entry[1] for entry in entries]
-    print(entries)
-    data = {"Date added": dates, "Document": docs}
-    df = pd.DataFrame(data)
-    st.dataframe(df[["Document", "Date added"]], hide_index=True)
-
+authenticator = Authenticate(
+    secret_credentials_path="client_secret.json",
+    cookie_name="my_cookie_name",
+    cookie_key="this_is_secret",
+    redirect_uri="http://localhost:8506",
+)
 
 ### Streamlit interface
 # To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
@@ -124,6 +123,8 @@ if "uploaded_file" not in st.session_state:
     st.session_state.uploaded_file = None
 if "wise_collection" not in st.session_state:
     st.session_state.wise_collection = utils.get_wise_documents(db_engine)
+if "show_login" not in st.session_state:
+    st.session_state.show_login = False
 
 # Default view for the app for users to enter their journal entry
 st.title("📝 Your Wise Friend Journal")
@@ -222,3 +223,13 @@ with st.sidebar:
                 os.remove(file_path)
             except Exception as e:
                 logger.error(f"Error removing {file_path}: {e}")
+
+    # Catch the login event
+    authenticator.check_authentification()
+    # Create the login button
+    authenticator.login()
+
+    if st.session_state["connected"]:
+        st.write(f"Hello, {st.session_state['user_info'].get('name')} ☀️")
+        if st.button("Log out"):
+            authenticator.logout()

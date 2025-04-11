@@ -11,3 +11,4 @@ datetime
 pre-commit
 scikit-learn
 pymupdf
+streamlit-google-auth
