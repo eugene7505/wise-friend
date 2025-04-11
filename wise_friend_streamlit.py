@@ -44,8 +44,6 @@ if "wise_collection" not in st.session_state:
     st.session_state.wise_collection = []
 if "dry_run" not in st.session_state:
     st.session_state.dry_run = False
-if "initialized" not in st.session_state:
-    st.session_state.initialized = False
 
 
 # Function to set the state of app to control the interface flow.
@@ -107,6 +105,7 @@ def display_entries(entries):
     st.dataframe(df, hide_index=True)
 
 
+# TODO: Setup secret management https://docs.streamlit.io/develop/concepts/connections/secrets-management
 with open("client_secret.json", "w") as f:
     json.dump(json.loads(st.secrets["google"]["client_secret_json"]), f)
 authenticator = Authenticate(
@@ -196,9 +195,7 @@ if st.session_state.stage == 1:
         display_reference(st.session_state.top_citations)
 
         # Retrieve relevant journal entries
-        st.session_state.entries = (
-            utils.get_journal_entries(db_engine) if not st.session_state.dry_run else []
-        )
+        st.session_state.entries = utils.get_journal_entries(db_engine)
         logger.info(
             f"Retrieved {len(st.session_state.entries)} entries from the journal"
         )
@@ -212,7 +209,7 @@ if st.session_state.stage == 1:
 with st.sidebar:
     uploaded_file = st.file_uploader("Add to your wise friends", type=["txt", "pdf"])
     with st.expander("📚 Your collections"):
-        display_entries(st.session_state.wise_collection)  # TODO do we need userid?
+        display_entries(st.session_state.wise_collection)
     if uploaded_file is not None:
         # ensure it's a new file and we want to add to the collection
         if st.session_state.uploaded_file is None or (
