@@ -7,7 +7,7 @@ import streamlit as st
 import utils
 from sqlalchemy import create_engine
 from streamlit_google_auth import Authenticate
-
+import json
 import config
 
 from langsmith import Client
@@ -96,12 +96,16 @@ def display_entries(entries):
     st.dataframe(df, hide_index=True)
 
 
+with open("client_secret.json", "w") as f:
+    json.dump(json.loads(st.secrets["google"]["client_secret_json"]), f)
+
 authenticator = Authenticate(
     secret_credentials_path="client_secret.json",
     cookie_name="my_cookie_name",
     cookie_key="this_is_secret",
     redirect_uri="http://localhost:8506",
 )
+os.remove("client_secret.json")
 
 ### Streamlit interface
 # To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.

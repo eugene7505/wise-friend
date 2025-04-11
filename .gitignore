@@ -1,2 +1,6 @@
-start.sh
+# Ignore secrets and sensitive files
+.streamlit/secrets.toml
+# Ignore notetbookx
 notebooks/*
+# Ignore logs
+*.log
