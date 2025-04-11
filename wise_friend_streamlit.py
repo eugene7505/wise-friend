@@ -27,14 +27,25 @@ logger = logging.getLogger(__name__)
 
 # Initialize the Langsmith client for logging user feedback
 client = Client()
+db_engine = create_engine(config.PSQL_URL)
 
 # Initialize Streamlit session state to manage the app's state across runs
+if "initialized" not in st.session_state:
+    st.session_state.initialized = False
 if "journal_entry" not in st.session_state:
     st.session_state.journal_entry = ""
 if "llm_response" not in st.session_state:
     st.session_state.llm_response = ""
 if "stage" not in st.session_state:
     st.session_state.stage = 0
+if "uploaded_file" not in st.session_state:
+    st.session_state.uploaded_file = None
+if "wise_collection" not in st.session_state:
+    st.session_state.wise_collection = []
+if "dry_run" not in st.session_state:
+    st.session_state.dry_run = False
+if "initialized" not in st.session_state:
+    st.session_state.initialized = False
 
 
 # Function to set the state of app to control the interface flow.
@@ -54,7 +65,7 @@ def display_feedback_button():
 # This function is called when the user clicks the feedback button
 # It logs the feedback score (0: thumbs down, 1: thumbs up) and the comment (if any) to Langsmith
 def log_user_feedback():
-    if not dry_run:
+    if not st.session_state.dry_run:
         client.create_feedback(
             st.session_state.response_run_id,
             key="feedback-key",
@@ -98,37 +109,32 @@ def display_entries(entries):
 
 with open("client_secret.json", "w") as f:
     json.dump(json.loads(st.secrets["google"]["client_secret_json"]), f)
-
 authenticator = Authenticate(
     secret_credentials_path="client_secret.json",
-    cookie_name="my_cookie_name",
-    cookie_key="this_is_secret",
+    cookie_name="my_cookie_name",  # TODO: do we need this?
+    cookie_key="this_is_secret",  # TODO: do we need this?
     redirect_uri="http://localhost:8506",
 )
-os.remove("client_secret.json")
 
 ### Streamlit interface
-# To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
-dry_run = False
-arguments = sys.argv[1:]
-if arguments:
-    dry_run = arguments[0] == "dry-run"
-    if dry_run:
-        logger.info("Running in dry-run mode")
-
 # startup
 llm, embeddings = utils.setup_models()
-wise_store, journal_store = utils.load_vector_stores(embeddings)
-db_engine = create_engine(config.PSQL_URL)
-log_table = utils.create_log_table(db_engine)
+# load the stores for the logged-in user. For logged-out users, use the default test account
+userid = (
+    st.session_state.user_info.get("id")
+    if st.session_state.connected
+    else config.TEST_USER_ID
+)
+wise_store, journal_store = utils.load_vector_stores(embeddings, userid)
+collection_table = utils.get_collection_table(db_engine)
 
-# setup states
-if "uploaded_file" not in st.session_state:
-    st.session_state.uploaded_file = None
-if "wise_collection" not in st.session_state:
-    st.session_state.wise_collection = utils.get_wise_documents(db_engine)
-if "show_login" not in st.session_state:
-    st.session_state.show_login = False
+# To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
+if not st.session_state.initialized:
+    arguments = sys.argv[1:]
+    if arguments:
+        st.session_state.dry_run = arguments[0] == "dry-run"
+    logger.info(f"Running in dry-run mode? {st.session_state.dry_run}")
+st.session_state.initialized = True
 
 # Default view for the app for users to enter their journal entry
 st.title("📝 Your Wise Friend Journal")
@@ -152,29 +158,38 @@ if st.session_state.stage == 1:
     # Store journal entry to the journal_store
     if st.session_state.journal_entry:
         utils.add_journal_entry(
-            journal_store, st.session_state.journal_entry, st.session_state.date
+            journal_store,
+            st.session_state.journal_entry,
+            st.session_state.date,
+            st.session_state.dry_run,
         )
         st.success("Entry added!")
 
         # wise responses
-        retrieved_docs = (
-            utils.retrieve(st.session_state.journal_entry, wise_store)
-            if not dry_run
-            else []
+        retrieved_docs = utils.retrieve(
+            st.session_state.journal_entry, wise_store, st.session_state.dry_run
         )
         logger.info(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
-        st.session_state.llm_response, st.session_state.response_run_id = (
-            utils.generate(
-                st.session_state.journal_entry, retrieved_docs, llm, utils.prompt
-            )
-            if not dry_run
-            else ("", "0000")  # for test purpose
-        )
+        st.session_state.llm_response, st.session_state.response_run_id = ("", "0000")
+        if not st.session_state.dry_run:
+            if retrieved_docs == []:
+                st.session_state.llm_response = (
+                    "Hello, you haven't added any wise friends. Do you need some help?"
+                )
+            else:
+                st.session_state.llm_response, st.session_state.response_run_id = (
+                    utils.generate(
+                        st.session_state.journal_entry,
+                        retrieved_docs,
+                        llm,
+                        utils.prompt,
+                    )
+                )
         st.session_state.top_citations = (
             utils.display_top_n_citations(
                 retrieved_docs, st.session_state.llm_response, embeddings, n=2
             )
-            if not dry_run
+            if not st.session_state.dry_run
             else ""
         )
         display_wise_response(st.session_state.llm_response)
@@ -182,7 +197,7 @@ if st.session_state.stage == 1:
 
         # Retrieve relevant journal entries
         st.session_state.entries = (
-            utils.get_journal_entries(db_engine) if not dry_run else []
+            utils.get_journal_entries(db_engine) if not st.session_state.dry_run else []
         )
         logger.info(
             f"Retrieved {len(st.session_state.entries)} entries from the journal"
@@ -197,7 +212,7 @@ if st.session_state.stage == 1:
 with st.sidebar:
     uploaded_file = st.file_uploader("Add to your wise friends", type=["txt", "pdf"])
     with st.expander("📚 Your collections"):
-        display_entries(st.session_state.wise_collection)
+        display_entries(st.session_state.wise_collection)  # TODO do we need userid?
     if uploaded_file is not None:
         # ensure it's a new file and we want to add to the collection
         if st.session_state.uploaded_file is None or (
@@ -208,11 +223,11 @@ with st.sidebar:
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             utils.add_wise_entry(wise_store, file_path)
-            utils.log_entry(
-                log_table,
+            utils.update_collection(
+                collection_table,
+                userid,
                 file_path.split("/")[-1],
                 st.session_state.date,
-                utils.Category.DOCUMENT.value,
                 db_engine,
             )
             st.success("Wise friend added!")
@@ -233,7 +248,7 @@ with st.sidebar:
     # Create the login button
     authenticator.login()
 
-    if st.session_state["connected"]:
-        st.write(f"Hello, {st.session_state['user_info'].get('name')} ☀️")
+    if st.session_state.connected:
+        st.write(f"Hello, {st.session_state.user_info.get('name')} ☀️")
         if st.button("Log out"):
             authenticator.logout()
