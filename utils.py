@@ -152,6 +152,9 @@ def get_journal_entries(engine, userid, k=5):
                 f"LIMIT {k};"
             )
         ).fetchall()
+    # Handle empty result
+    if not result:
+        return None
     return result
 
 

@@ -200,7 +200,9 @@ if st.session_state.stage == 1:
             f"Retrieved {len(st.session_state.entries)} entries from the journal"
         )
         st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
-        display_entries(st.session_state.entries)
+        if st.session_state.entries:
+            # Display the entries
+            display_entries(st.session_state.entries)
     else:
         st.error("Please enter some content.")
 
