@@ -149,8 +149,10 @@ st.button("Reflect", on_click=set_state, args=[1])
 if st.session_state.llm_response:
     display_wise_response(st.session_state.llm_response)
     display_reference(st.session_state.top_citations)
-    st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
-    display_entries(st.session_state.entries)
+    if st.session_state.entries:
+        st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
+        # Display the entries
+        display_entries(st.session_state.entries)
 
 # Store the journal entry and generate wise response once the user clicks the "Reflect" button
 if st.session_state.stage == 1:
@@ -195,12 +197,12 @@ if st.session_state.stage == 1:
         display_reference(st.session_state.top_citations)
 
         # Retrieve relevant journal entries
-        st.session_state.entries = utils.get_journal_entries(db_engine)
+        st.session_state.entries = utils.get_journal_entries(db_engine, userid)
         logger.info(
             f"Retrieved {len(st.session_state.entries)} entries from the journal"
         )
-        st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
         if st.session_state.entries:
+            st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
             # Display the entries
             display_entries(st.session_state.entries)
     else:

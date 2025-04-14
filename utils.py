@@ -141,21 +141,21 @@ def get_journal_entries_with_similar(journal_store, anchor: str, threshold=0.3, 
 
 
 def get_journal_entries(engine, userid, k=5):
+    collection_name = f"{config.JOURNAL_COLLECTION}_{userid}"
     with engine.connect() as connection:
         result = connection.execute(
             text(
-                f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
-                f"JOIN langchain_pg_collection c "
-                f"ON e.collection_id = c.uuid "
-                f"WHERE c.name = '{config.JOURNAL_COLLECTION}'_{userid} "
-                f"ORDER BY e.cmetadata->>'date' DESC "
-                f"LIMIT {k};"
-            )
+                "SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
+                "JOIN langchain_pg_collection c "
+                "ON e.collection_id = c.uuid "
+                "WHERE c.name = :collection_name "
+                "ORDER BY e.cmetadata->>'date' DESC "
+                "LIMIT :limit;"
+            ),
+            {"collection_name": collection_name, "limit": k},
         ).fetchall()
     # Handle empty result
-    if not result:
-        return None
-    return result
+    return result if result else None
 
 
 def get_wise_documents(engine, userid):
