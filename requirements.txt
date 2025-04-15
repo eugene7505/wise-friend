@@ -12,3 +12,4 @@ pre-commit
 scikit-learn
 pymupdf
 streamlit-google-auth
+psycopg[binary]
