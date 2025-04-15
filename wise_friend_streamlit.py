@@ -44,6 +44,8 @@ if "wise_collection" not in st.session_state:
     st.session_state.wise_collection = []
 if "dry_run" not in st.session_state:
     st.session_state.dry_run = False
+if "top_citations" not in st.session_state:
+    st.session_state.top_citations = ""
 
 
 # Function to set the state of app to control the interface flow.
@@ -92,7 +94,6 @@ def display_wise_response(llm_response):
 
 def display_reference(top_citations):
     with st.expander("**References**"):
-        # st.markdown(f"**Reference:**  \n\n*{top_citations}*")
         for i, ref in enumerate(top_citations):
             clean_text = ref.replace("\n", "<br>").replace("\xa0", " ")
             st.markdown(f"**Reference {i + 1}:**", unsafe_allow_html=True)
@@ -173,7 +174,7 @@ if st.session_state.stage == 1:
         logger.info(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
         st.session_state.llm_response, st.session_state.response_run_id = ("", "0000")
         if not st.session_state.dry_run:
-            if retrieved_docs == []:
+            if len(retrieved_docs) == 0:
                 st.session_state.llm_response = (
                     "Hello, you haven't added any wise friends. Do you need some help?"
                 )
@@ -186,13 +187,9 @@ if st.session_state.stage == 1:
                         utils.prompt,
                     )
                 )
-        st.session_state.top_citations = (
-            utils.display_top_n_citations(
-                retrieved_docs, st.session_state.llm_response, embeddings, n=2
-            )
-            if not st.session_state.dry_run
-            else ""
-        )
+                st.session_state.top_citations = utils.display_top_n_citations(
+                    retrieved_docs, st.session_state.llm_response, embeddings, n=2
+                )
         display_wise_response(st.session_state.llm_response)
         display_reference(st.session_state.top_citations)
 
