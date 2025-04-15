@@ -113,7 +113,7 @@ authenticator = Authenticate(
     secret_credentials_path="client_secret.json",
     cookie_name="my_cookie_name",  # TODO: do we need this?
     cookie_key="this_is_secret",  # TODO: do we need this?
-    redirect_uri="http://localhost:8506",
+    redirect_uri="http://localhost:8501",
 )
 
 ### Streamlit interface
