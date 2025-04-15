@@ -154,8 +154,7 @@ def get_journal_entries(engine, userid, k=5):
             ),
             {"collection_name": collection_name, "limit": k},
         ).fetchall()
-    # Handle empty result
-    return result if result else None
+    return result
 
 
 def get_wise_documents(engine, userid):
