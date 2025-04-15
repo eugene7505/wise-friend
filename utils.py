@@ -1,6 +1,5 @@
 import logging
 import re
-from datetime import datetime
 from enum import Enum
 
 import numpy as np
@@ -36,8 +35,8 @@ class Category(Enum):
     DOCUMENT = "document"
 
 
-def retrieve(query: str, vector_store: VectorStore):
-    retrieved_docs = vector_store.similarity_search(query)
+def retrieve(query: str, vector_store: VectorStore, dry_run: bool):
+    retrieved_docs = vector_store.similarity_search(query) if not dry_run else []
     return retrieved_docs
 
 
@@ -59,34 +58,34 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     return response.content, run.id
 
 
-def load_vector_stores(embeddings):
+def load_vector_stores(embeddings, userid):
     wise_store = PGVector.from_existing_index(
         embedding=embeddings,
         connection=config.PSQL_URL,
-        collection_name=config.WISE_COLLECTION,
+        collection_name=f"{config.WISE_COLLECTION}_{userid}",
     )
     journal_store = PGVector.from_existing_index(
         embedding=embeddings,
         connection=config.PSQL_URL,
-        collection_name=config.JOURNAL_COLLECTION,
+        collection_name=f"{config.JOURNAL_COLLECTION}_{userid}",
     )
     return wise_store, journal_store
 
 
-def create_log_table(engine):
+def get_collection_table(engine):
     # creates all other dependent tables if not exists
     metadata = MetaData()
     # Define a table using metadata
-    log_table = Table(
-        "log_table",
+    table = Table(
+        config.WISE_COLLECTION_TABLE,
         metadata,
         Column("id", Integer, Sequence("some_id_seq", start=1), primary_key=True),
+        Column("userid", String, nullable=False),
         Column("content", String, nullable=False),
         Column("date", String, nullable=False),
-        Column("category", String, nullable=False),
     )
     metadata.create_all(engine)
-    return log_table
+    return table
 
 
 def setup_models():
@@ -103,8 +102,8 @@ def setup_models():
     return llm, embeddings
 
 
-def log_entry(log_table, content, date, category, engine):
-    query = insert(log_table).values(content=content, date=date, category=category)
+def update_collection(table, userid, content, date, engine):
+    query = insert(table).values(userid=userid, content=content, date=date)
     with engine.connect() as conn:
         conn.execute(query)
         conn.commit()
@@ -127,10 +126,9 @@ def add_wise_entry(wise_store, file_path: str):
         wise_store.add_documents(batch)
 
 
-def add_journal_entry(
-    journal_store, entry: str, date=datetime.now().strftime("%Y-%m-%d")
-):
-    journal_store.add_texts([entry], metadatas=[{"date": date}])
+def add_journal_entry(journal_store, entry: str, date: str, dry_run: bool):
+    if not dry_run:
+        journal_store.add_texts([entry], metadatas=[{"date": date}])
 
 
 def get_journal_entries_with_similar(journal_store, anchor: str, threshold=0.3, k=5):
@@ -142,26 +140,28 @@ def get_journal_entries_with_similar(journal_store, anchor: str, threshold=0.3, 
     ]
 
 
-def get_journal_entries(engine, k=5):
+def get_journal_entries(engine, userid, k=5):
+    collection_name = f"{config.JOURNAL_COLLECTION}_{userid}"
     with engine.connect() as connection:
         result = connection.execute(
             text(
-                f"SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
-                f"JOIN langchain_pg_collection c "
-                f"ON e.collection_id = c.uuid "
-                f"WHERE c.name = '{config.JOURNAL_COLLECTION}' "
-                f"ORDER BY e.cmetadata->>'date' DESC "
-                f"LIMIT {k};"
-            )
+                "SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
+                "JOIN langchain_pg_collection c "
+                "ON e.collection_id = c.uuid "
+                "WHERE c.name = :collection_name "
+                "ORDER BY e.cmetadata->>'date' DESC "
+                "LIMIT :limit;"
+            ),
+            {"collection_name": collection_name, "limit": k},
         ).fetchall()
     return result
 
 
-def get_wise_documents(engine):
+def get_wise_documents(engine, userid):
     with engine.connect() as connection:
         result = connection.execute(
             text(
-                f"SELECT content, date FROM log_table where category = '{Category.DOCUMENT.value}'"
+                f"SELECT content, date FROM {config.WISE_COLLECTION_TABLE} where userid = {userid}"
             )
         ).fetchall()
     # list of (content, date) tuples, filter out empty entries
@@ -189,7 +189,6 @@ def display_top_n_citations(
     n: int,
 ):
     llm_response_embedding = embedding_paragraph(llm_response, embeddings)
-
     similarity_scores = []
     for idx, doc in enumerate(context):
         doc_content = doc.page_content[:1000]
