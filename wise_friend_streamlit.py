@@ -205,7 +205,6 @@ if st.session_state.stage == 1:
                             response_text += content
                             response_placeholder.text(response_text)
                             if run_id:
-                                st.write(f"\nRun ID: {run_id}")
                                 st.session_state.response_run_id = run_id
                         st.session_state.llm_response = response_text
 
