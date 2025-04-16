@@ -42,6 +42,8 @@ def retrieve(query: str, vector_store: VectorStore, dry_run: bool):
     return retrieved_docs
 
 
+# Helper function to concatenate outputs of the LLM
+# for cleaner LangSmith tracing.
 def concatenate(outputs: list):
     return "".join(x[0] for x in outputs if x and x[0])
 
