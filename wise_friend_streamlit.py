@@ -12,6 +12,7 @@ import config
 
 from langsmith import Client
 import logging
+import asyncio
 
 # Set up logging configuration
 logging.basicConfig(
@@ -88,7 +89,7 @@ def display_journal_entry(entry, date):
 def display_wise_response(llm_response):
     st.header("Wise Friend Response")
     with st.chat_message("ai", avatar="🧠"):
-        st.markdown(f"**Wise Friend:**  \n\n*{llm_response}*")
+        st.markdown(f"**Wise Friend:**  \n\n{llm_response}")
         display_feedback_button()
 
 
@@ -179,18 +180,42 @@ if st.session_state.stage == 1:
                     "Hello, you haven't added any wise friends. Do you need some help?"
                 )
             else:
-                st.session_state.llm_response, st.session_state.response_run_id = (
-                    utils.generate(
-                        st.session_state.journal_entry,
-                        retrieved_docs,
-                        llm,
-                        utils.prompt,
-                    )
-                )
+                # st.session_state.llm_response, st.session_state.response_run_id = (
+                #     utils.generate(
+                #         st.session_state.journal_entry,
+                #         retrieved_docs,
+                #         llm,
+                #         utils.prompt,
+                #     )
+                # )
+                # display streaming llm response
+                st.header("Wise Friend Response")
+                with st.chat_message("ai", avatar="🧠"):
+                    st.markdown("**Wise Friend:**  \n\n")
+                    response_placeholder = st.empty()
+
+                    async def process_streaming():
+                        response_text = ""
+                        async for content, run_id in utils.generate_streaming(
+                            st.session_state.journal_entry,
+                            retrieved_docs,
+                            llm,
+                            utils.prompt,
+                        ):
+                            response_text += content
+                            response_placeholder.text(response_text)
+                            if run_id:
+                                st.write(f"\nRun ID: {run_id}")
+                                st.session_state.response_run_id = run_id
+                        st.session_state.llm_response = response_text
+
+                    asyncio.run(process_streaming())
+                    display_feedback_button()
+
                 st.session_state.top_citations = utils.display_top_n_citations(
                     retrieved_docs, st.session_state.llm_response, embeddings, n=2
                 )
-        display_wise_response(st.session_state.llm_response)
+        # display_wise_response(st.session_state.llm_response)
         display_reference(st.session_state.top_citations)
 
         # Retrieve relevant journal entries
