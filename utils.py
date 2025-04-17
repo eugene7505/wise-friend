@@ -21,6 +21,8 @@ from langsmith.run_helpers import get_current_run_tree
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy import text, insert, Table, MetaData, Sequence, Column, Integer, String
 from typing_extensions import List
+from typing import AsyncGenerator, Tuple
+
 
 import config
 
@@ -40,6 +42,42 @@ def retrieve(query: str, vector_store: VectorStore, dry_run: bool):
     return retrieved_docs
 
 
+# Helper function to concatenate outputs of the LLM
+# for cleaner LangSmith tracing.
+def concatenate(outputs: list):
+    return "".join(x[0] for x in outputs if x and x[0])
+
+
+# Generate streaming response
+@traceable(reduce_fn=concatenate)
+async def generate_streaming(
+    query: str,
+    context: List[Document],
+    llm: ChatFireworks,
+    prompt,
+) -> AsyncGenerator[Tuple[str, str], None]:
+    docs_content = "\n\n".join(doc.page_content for doc in context)
+    base_messages = prompt.invoke(
+        {"question": query, "context": docs_content, "history": None}
+    ).to_messages()
+    # Prepend the supportive system message
+    supportive_message = SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT)
+
+    messages = [supportive_message] + base_messages
+    run = get_current_run_tree()
+    run_id = run.id
+    first = True
+
+    async for chunk in llm.astream(messages):
+        content = chunk.content or ""
+        if first:
+            yield content, run_id  # yield run_id with the first chunk
+            first = False
+        else:
+            yield content, None  # only content afterwards
+
+
+# Generate non-streaming response
 @traceable
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
@@ -47,9 +85,7 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
         {"question": query, "context": docs_content, "history": None}
     ).to_messages()
     # Prepend the supportive system message
-    supportive_message = SystemMessage(
-        content="You are a wise, supportive inner voice. Offer empathetic, gentle guidance using provided context to replace self-criticism with empowering insights or new perspectives."
-    )
+    supportive_message = SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT)
 
     messages = [supportive_message] + base_messages
     run = get_current_run_tree()
