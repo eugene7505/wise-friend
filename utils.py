@@ -48,6 +48,7 @@ def concatenate(outputs: list):
     return "".join(x[0] for x in outputs if x and x[0])
 
 
+# Generate streaming response
 @traceable(reduce_fn=concatenate)
 async def generate_streaming(
     query: str,
@@ -78,6 +79,7 @@ async def generate_streaming(
             yield content, None  # only content afterwards
 
 
+# Generate non-streaming response
 @traceable
 def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     docs_content = "\n\n".join(doc.page_content for doc in context)
