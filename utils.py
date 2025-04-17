@@ -61,9 +61,7 @@ async def generate_streaming(
         {"question": query, "context": docs_content, "history": None}
     ).to_messages()
     # Prepend the supportive system message
-    supportive_message = SystemMessage(
-        content="You are a wise, supportive inner voice. Offer empathetic, gentle guidance using provided context to replace self-criticism with empowering insights or new perspectives."
-    )
+    supportive_message = SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT)
 
     messages = [supportive_message] + base_messages
     run = get_current_run_tree()
@@ -87,9 +85,7 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
         {"question": query, "context": docs_content, "history": None}
     ).to_messages()
     # Prepend the supportive system message
-    supportive_message = SystemMessage(
-        content="You are a wise, supportive inner voice. Offer empathetic, gentle guidance using provided context to replace self-criticism with empowering insights or new perspectives."
-    )
+    supportive_message = SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT)
 
     messages = [supportive_message] + base_messages
     run = get_current_run_tree()
