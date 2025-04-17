@@ -86,14 +86,6 @@ def display_journal_entry(entry, date):
         st.markdown(f"**Journal Entry:**  \n\n*{entry}*")
 
 
-def display_wise_response(llm_response):
-    st.header("Wise Friend Response")
-    with st.chat_message("ai", avatar="🧠"):
-        st.markdown("**Wise Friend:**  \n\n")
-        st.write(llm_response)
-        display_feedback_button()
-
-
 async def stream_response(query, retrieved_docs, llm, prompt, response_placeholder):
     response_text = ""
     async for token, run_id in utils.generate_streaming(
@@ -106,24 +98,26 @@ async def stream_response(query, retrieved_docs, llm, prompt, response_placehold
     return response_text
 
 
-def display_wise_response_stream():
+def display_wise_response():
     st.header("Wise Friend Response")
     with st.chat_message("ai", avatar="🧠"):
         st.markdown("**Wise Friend:**  \n\n")
-        response_placeholder = st.empty()
 
-        response_text = asyncio.run(
-            stream_response(
-                st.session_state.journal_entry,
-                retrieved_docs,
-                llm,
-                utils.prompt,
-                response_placeholder,
+        if st.session_state.llm_response:
+            st.write(st.session_state.llm_response)
+        else:
+            response_placeholder = st.empty()
+            response_text = asyncio.run(
+                stream_response(
+                    st.session_state.journal_entry,
+                    retrieved_docs,
+                    llm,
+                    utils.prompt,
+                    response_placeholder,
+                )
             )
-        )
-
-        st.session_state.llm_response = response_text
-        display_feedback_button()
+            st.session_state.llm_response = response_text
+            display_feedback_button()
 
 
 def display_reference(top_citations):
@@ -182,7 +176,7 @@ st.session_state.journal_entry = st.text_area(
 st.button("Reflect", on_click=set_state, args=[1])
 
 if st.session_state.llm_response:
-    display_wise_response(st.session_state.llm_response)
+    display_wise_response()
     display_reference(st.session_state.top_citations)
     if st.session_state.entries:
         st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
@@ -206,16 +200,17 @@ if st.session_state.stage == 1:
             st.session_state.journal_entry, wise_store, st.session_state.dry_run
         )
         logger.info(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
-        st.session_state.llm_response, st.session_state.response_run_id = ("", "0000")
+
         if not st.session_state.dry_run:
             if len(retrieved_docs) == 0:
                 st.session_state.llm_response = (
                     "Hello, you haven't added any wise friends. Do you need some help?"
                 )
-                display_wise_response(st.session_state.llm_response)
+                # display static llm response
+                display_wise_response()
             else:
                 # display streaming llm response
-                display_wise_response_stream()
+                display_wise_response()
                 st.session_state.top_citations = utils.display_top_n_citations(
                     retrieved_docs, st.session_state.llm_response, embeddings, n=2
                 )
