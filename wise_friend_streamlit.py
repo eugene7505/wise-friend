@@ -86,11 +86,9 @@ def display_journal_entry(entry, date):
         st.markdown(f"**Journal Entry:**  \n\n*{entry}*")
 
 
-async def stream_response(query, retrieved_docs, llm, prompt, response_placeholder):
+async def stream_response(query, retrieved_docs, llm, response_placeholder):
     response_text = ""
-    async for token, run_id in utils.generate_streaming(
-        query, retrieved_docs, llm, prompt
-    ):
+    async for token, run_id in utils.generate_streaming(query, retrieved_docs, llm):
         response_text += token
         response_placeholder.write(response_text)
         if run_id:
@@ -112,7 +110,6 @@ def display_wise_response():
                     st.session_state.journal_entry,
                     retrieved_docs,
                     llm,
-                    utils.prompt,
                     response_placeholder,
                 )
             )
