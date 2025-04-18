@@ -204,7 +204,9 @@ if st.session_state.stage == 1:
         retrieved_docs = utils.retrieve(
             st.session_state.journal_entry, wise_store, st.session_state.dry_run
         )
-        logger.info(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
+        logger.info(
+            f"Retrieved {len(retrieved_docs)} documents from the wise_embeddings"
+        )
 
         if not st.session_state.dry_run:
             if len(retrieved_docs) == 0:

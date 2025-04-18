@@ -37,8 +37,12 @@ class Category(Enum):
     DOCUMENT = "document"
 
 
-def retrieve(query: str, vector_store: VectorStore, dry_run: bool):
-    retrieved_docs = vector_store.similarity_search(query) if not dry_run else []
+def retrieve(query: str, vector_store: VectorStore, userid: str, dry_run: bool):
+    retrieved_docs = (
+        vector_store.similarity_search(query, filter={"userid": userid})
+        if not dry_run
+        else []
+    )
     return retrieved_docs
 
 
