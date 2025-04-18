@@ -5,11 +5,11 @@ from enum import Enum
 import numpy as np
 from langchain import hub
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
+from langchain_community.vectorstores import SupabaseVectorStore
 from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage
 from langchain_core.vectorstores import VectorStore
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
-from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Import Langsmith for user feedback collection
@@ -94,21 +94,23 @@ def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
     return response.content, run.id
 
 
-def load_vector_stores(embeddings, userid):
-    wise_store = PGVector.from_existing_index(
+def load_vector_stores(client, embeddings):
+    wise_store = SupabaseVectorStore(
         embedding=embeddings,
-        connection=config.PSQL_URL,
-        collection_name=f"{config.WISE_COLLECTION}_{userid}",
+        client=client,
+        table_name="wise_embeddings",
+        query_name="match_documents",
     )
-    journal_store = PGVector.from_existing_index(
+    journal_store = SupabaseVectorStore(
         embedding=embeddings,
-        connection=config.PSQL_URL,
-        collection_name=f"{config.JOURNAL_COLLECTION}_{userid}",
+        client=client,
+        table_name="journal_embeddings",
+        query_name="match_documents",
     )
     return wise_store, journal_store
 
 
-def get_collection_table(engine):
+def get_wise_collection_table(engine):
     # creates all other dependent tables if not exists
     metadata = MetaData()
     # Define a table using metadata
@@ -138,62 +140,74 @@ def setup_models():
     return llm, embeddings
 
 
-def update_collection(table, userid, content, date, engine):
+def update_wise_collection(table, userid: str, content: str, date: str, engine):
     query = insert(table).values(userid=userid, content=content, date=date)
     with engine.connect() as conn:
         conn.execute(query)
         conn.commit()
 
 
-def add_wise_entry(wise_store, file_path: str):
-    loader = PyMuPDFLoader(file_path)
-    docs = loader.load()
-    # Clean citations like [1], [23], etc.
-    for doc in docs:
-        doc.page_content = re.sub(r"\[\d+\]", "", doc.page_content)
-
-    # RecursiveCharacterTextSplitter allows you to split based on sentence boundaries,
-    # and then split the sentences into chunks of a certain size, if the sentence is too long.
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
-    all_splits = text_splitter.split_documents(docs)
-    batch_size = 200
-    for i in range(0, len(all_splits), batch_size):
-        batch = all_splits[i : i + batch_size]
-        wise_store.add_documents(batch)
-
-
-def add_journal_entry(journal_store, entry: str, date: str, dry_run: bool):
+def add_wise_entry(
+    wise_store: VectorStore, file_path: str, userid: str, dry_run: bool = False
+):
     if not dry_run:
-        journal_store.add_texts([entry], metadatas=[{"date": date}])
+        loader = PyMuPDFLoader(file_path)
+        docs = loader.load()
+        # Clean citations like [1], [23], etc.
+        for doc in docs:
+            doc.page_content = re.sub(r"\[\d+\]", "", doc.page_content)
+
+        # RecursiveCharacterTextSplitter allows you to split based on sentence boundaries,
+        # and then split the sentences into chunks of a certain size, if the sentence is too long.
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1500, chunk_overlap=200
+        )
+        all_splits = text_splitter.split_documents(docs)
+        batch_size = 200
+        for i in range(0, len(all_splits), batch_size):
+            batch = all_splits[i : i + batch_size]
+            wise_store.add_texts(
+                texts=batch, metadatas=[{"userid": userid}] * len(batch)
+            )
 
 
-def get_journal_entries_with_similar(journal_store, anchor: str, threshold=0.3, k=5):
-    entries = journal_store.similarity_search_with_score(anchor, k=k)
-    return [
-        (entry[0].page_content, entry[0].metadata["date"])
-        for entry in entries
-        if entry[1] <= threshold
-    ]
+def add_journal_entry(
+    journal_store: VectorStore,
+    entry: str,
+    userid: str,
+    date: str,
+    dry_run: bool = False,
+):
+    if not dry_run:
+        journal_store.add_texts(
+            texts=[entry], metadatas=[{"userid": userid, "date": date}]
+        )
 
 
-def get_journal_entries(engine, userid, k=5):
-    collection_name = f"{config.JOURNAL_COLLECTION}_{userid}"
+# def get_journal_entries_with_similar(journal_store: VectorStore, query: str, userid: str, threshold=0.3, k=5):
+#     entries = journal_store.similarity_search_with_relevance_scores(query, k=k)
+#     return [
+#         (entry[0].page_content, entry[0].metadata["date"])
+#         for entry in entries
+#         if entry[1] <= threshold
+#     ]
+
+
+def get_journal_entries(engine, userid: str, k=5):
     with engine.connect() as connection:
         result = connection.execute(
             text(
-                "SELECT e.document, e.cmetadata->>'date' FROM langchain_pg_embedding e "
-                "JOIN langchain_pg_collection c "
-                "ON e.collection_id = c.uuid "
-                "WHERE c.name = :collection_name "
-                "ORDER BY e.cmetadata->>'date' DESC "
+                "SELECT content, metadata->>'date' FROM journal_embeddings "
+                "WHERE userid = :userid "
+                "ORDER BY metadata->>'date' DESC "
                 "LIMIT :limit;"
             ),
-            {"collection_name": collection_name, "limit": k},
+            {"collection_name": userid, "limit": k},
         ).fetchall()
     return result
 
 
-def get_wise_documents(engine, userid):
+def get_wise_collection(engine, userid: str):
     with engine.connect() as connection:
         result = connection.execute(
             text(

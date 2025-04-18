@@ -13,6 +13,8 @@ import config
 from langsmith import Client
 import logging
 import asyncio
+from supabase.client import create_client
+
 
 # Set up logging configuration
 logging.basicConfig(
@@ -29,6 +31,8 @@ logger = logging.getLogger(__name__)
 # Initialize the Langsmith client for logging user feedback
 client = Client()
 db_engine = create_engine(config.PSQL_URL)
+
+supabase_client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 # Initialize Streamlit session state to manage the app's state across runs
 if "initialized" not in st.session_state:
@@ -153,8 +157,8 @@ userid = (
     if st.session_state.connected
     else config.TEST_USER_ID
 )
-wise_store, journal_store = utils.load_vector_stores(embeddings, userid)
-collection_table = utils.get_collection_table(db_engine)
+wise_store, journal_store = utils.load_vector_stores(supabase_client, embeddings)
+collection_table = utils.get_wise_collection_table(db_engine)
 
 # To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
 if not st.session_state.initialized:
@@ -190,6 +194,7 @@ if st.session_state.stage == 1:
         utils.add_journal_entry(
             journal_store,
             st.session_state.journal_entry,
+            userid,
             st.session_state.date,
             st.session_state.dry_run,
         )
@@ -243,8 +248,8 @@ with st.sidebar:
             file_path = f"/tmp/{uploaded_file.name}"
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            utils.add_wise_entry(wise_store, file_path)
-            utils.update_collection(
+            utils.add_wise_entry(wise_store, file_path, userid)
+            utils.update_wise_collection(
                 collection_table,
                 userid,
                 file_path.split("/")[-1],
