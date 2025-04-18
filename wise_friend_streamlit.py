@@ -158,7 +158,7 @@ userid = (
     else config.TEST_USER_ID
 )
 wise_store, journal_store = utils.load_vector_stores(supabase_client, embeddings)
-collection_table = utils.get_wise_collection_table(db_engine)
+# collection_table = utils.get_wise_collection_table(db_engine)
 
 # To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
 if not st.session_state.initialized:
@@ -249,13 +249,13 @@ with st.sidebar:
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             utils.add_wise_entry(wise_store, file_path, userid)
-            utils.update_wise_collection(
-                collection_table,
-                userid,
-                file_path.split("/")[-1],
-                st.session_state.date,
-                db_engine,
-            )
+            # utils.update_wise_collection(
+            #     collection_table,
+            #     userid,
+            #     file_path.split("/")[-1],
+            #     st.session_state.date,
+            #     db_engine,
+            # )
             st.success("Wise friend added!")
             # update states
             st.session_state.wise_collection += [
