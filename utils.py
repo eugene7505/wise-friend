@@ -1,6 +1,5 @@
 import logging
 import re
-from enum import Enum
 
 import numpy as np
 from langchain import hub
@@ -11,6 +10,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.vectorstores import VectorStore
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+import supabase
 
 # Import Langsmith for user feedback collection
 from langsmith import traceable
@@ -19,9 +19,9 @@ from langsmith.run_helpers import get_current_run_tree
 
 # Calculate similarity score for citations
 from sklearn.metrics.pairwise import cosine_similarity
-from sqlalchemy import text, insert, Table, MetaData, Sequence, Column, Integer, String
 from typing_extensions import List
 from typing import AsyncGenerator, Tuple
+import uuid
 
 
 import config
@@ -31,10 +31,6 @@ logger.setLevel(logging.INFO)
 
 
 prompt = hub.pull(config.PROMPT)
-
-
-class Category(Enum):
-    DOCUMENT = "document"
 
 
 def retrieve(query: str, vector_store: VectorStore, userid: str, dry_run: bool):
@@ -103,31 +99,31 @@ def load_vector_stores(client, embeddings):
         embedding=embeddings,
         client=client,
         table_name="wise_embeddings",
-        query_name="match_documents",
+        query_name="similar_wise_documents",
     )
     journal_store = SupabaseVectorStore(
         embedding=embeddings,
         client=client,
         table_name="journal_embeddings",
-        query_name="match_documents",
+        query_name=None,  # None, as we don't do similarity search for journal entries
     )
     return wise_store, journal_store
 
 
-def get_wise_collection_table(engine):
-    # creates all other dependent tables if not exists
-    metadata = MetaData()
-    # Define a table using metadata
-    table = Table(
-        config.WISE_COLLECTION_TABLE,
-        metadata,
-        Column("id", Integer, Sequence("some_id_seq", start=1), primary_key=True),
-        Column("userid", String, nullable=False),
-        Column("content", String, nullable=False),
-        Column("date", String, nullable=False),
-    )
-    metadata.create_all(engine)
-    return table
+# def get_wise_collection_table(engine):
+#     # creates all other dependent tables if not exists
+#     metadata = MetaData()
+#     # Define a table using metadata
+#     table = Table(
+#         config.WISE_COLLECTION_TABLE,
+#         metadata,
+#         Column("id", Integer, Sequence("some_id_seq", start=1), primary_key=True),
+#         Column("userid", String, nullable=False),
+#         Column("content", String, nullable=False),
+#         Column("date", String, nullable=False),
+#     )
+#     metadata.create_all(engine)
+#     return table
 
 
 def setup_models():
@@ -144,22 +140,34 @@ def setup_models():
     return llm, embeddings
 
 
-def update_wise_collection(table, userid: str, content: str, date: str, engine):
-    query = insert(table).values(userid=userid, content=content, date=date)
-    with engine.connect() as conn:
-        conn.execute(query)
-        conn.commit()
+def add_wise_collection(
+    client: supabase.Client, userid: str, content: str, date: str
+) -> List:
+    result = (
+        client.table(config.WISE_COLLECTION_TABLE)
+        .insert(
+            {
+                "id": str(uuid.uuid4()),
+                "userid": userid,
+                "content": content,
+                "date": date,
+            }
+        )
+        .execute()
+    )
+    return result.data
 
 
 def add_wise_entry(
-    wise_store: VectorStore, file_path: str, userid: str, dry_run: bool = False
-):
+    wise_store: SupabaseVectorStore, file_path: str, userid: str, dry_run: bool = False
+) -> None:
     if not dry_run:
         loader = PyMuPDFLoader(file_path)
         docs = loader.load()
         # Clean citations like [1], [23], etc.
         for doc in docs:
             doc.page_content = re.sub(r"\[\d+\]", "", doc.page_content)
+            doc.metadata["userid"] = userid
 
         # RecursiveCharacterTextSplitter allows you to split based on sentence boundaries,
         # and then split the sentences into chunks of a certain size, if the sentence is too long.
@@ -170,9 +178,7 @@ def add_wise_entry(
         batch_size = 200
         for i in range(0, len(all_splits), batch_size):
             batch = all_splits[i : i + batch_size]
-            wise_store.add_texts(
-                texts=batch, metadatas=[{"userid": userid}] * len(batch)
-            )
+            wise_store.add_documents(documents=batch)
 
 
 def add_journal_entry(
@@ -181,45 +187,33 @@ def add_journal_entry(
     userid: str,
     date: str,
     dry_run: bool = False,
-):
+) -> None:
     if not dry_run:
         journal_store.add_texts(
             texts=[entry], metadatas=[{"userid": userid, "date": date}]
         )
 
 
-# def get_journal_entries_with_similar(journal_store: VectorStore, query: str, userid: str, threshold=0.3, k=5):
-#     entries = journal_store.similarity_search_with_relevance_scores(query, k=k)
-#     return [
-#         (entry[0].page_content, entry[0].metadata["date"])
-#         for entry in entries
-#         if entry[1] <= threshold
-#     ]
+def get_journal_entries(client: supabase.Client, userid: str, k=5) -> List:
+    result = (
+        client.table(config.JOURNAL_EMBEDDING_TABLE)
+        .select("content, metadata->>date")
+        .eq("metadata->>userid", userid)
+        .order("metadata->>date", desc=True)
+        .limit(k)
+        .execute()
+    )
+    return result.data
 
 
-def get_journal_entries(engine, userid: str, k=5):
-    with engine.connect() as connection:
-        result = connection.execute(
-            text(
-                "SELECT content, metadata->>'date' FROM journal_embeddings "
-                "WHERE userid = :userid "
-                "ORDER BY metadata->>'date' DESC "
-                "LIMIT :limit;"
-            ),
-            {"collection_name": userid, "limit": k},
-        ).fetchall()
-    return result
-
-
-def get_wise_collection(engine, userid: str):
-    with engine.connect() as connection:
-        result = connection.execute(
-            text(
-                f"SELECT content, date FROM {config.WISE_COLLECTION_TABLE} where userid = {userid}"
-            )
-        ).fetchall()
-    # list of (content, date) tuples, filter out empty entries
-    return [row for row in result if row[0]]
+def get_wise_collection(client: supabase.Client, userid: str) -> List:
+    result = (
+        client.table(config.WISE_COLLECTION_TABLE)  # replace with your table name
+        .select("content, date")
+        .eq("userid", userid)
+        .execute()
+    )
+    return result.data
 
 
 # Functions to display citations
