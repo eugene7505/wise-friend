@@ -65,7 +65,7 @@ async def generate_streaming(
 
     messages = [supportive_message] + base_messages
     run = get_current_run_tree()
-    run_id = run.id
+    run_id = run.id if run else "0000"
     first = True
 
     async for chunk in llm.astream(messages):
