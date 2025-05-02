@@ -29,9 +29,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-prompt = hub.pull(config.PROMPT)
-
-
 def retrieve(query: str, vector_store: VectorStore, userid: str, dry_run: bool):
     retrieved_docs = (
         vector_store.similarity_search(query, filter={"userid": userid})
