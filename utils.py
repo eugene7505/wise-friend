@@ -2,11 +2,10 @@ import logging
 import re
 
 import numpy as np
-from langchain import hub
 from langchain_community.document_loaders.pdf import PyMuPDFLoader
 from langchain_community.vectorstores import SupabaseVectorStore
 from langchain_core.documents import Document
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.vectorstores import VectorStore
 from langchain_fireworks import ChatFireworks, FireworksEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -51,43 +50,53 @@ def concatenate(outputs: list):
 # Generate streaming response
 @traceable(reduce_fn=concatenate)
 async def generate_streaming(
-    query: str,
-    context: List[Document],
-    llm: ChatFireworks,
-    prompt,
+    query: str, context: List[Document], llm: ChatFireworks
 ) -> AsyncGenerator[Tuple[str, str], None]:
     docs_content = "\n\n".join(doc.page_content for doc in context)
-    base_messages = prompt.invoke(
-        {"question": query, "context": docs_content, "history": None}
-    ).to_messages()
-    # Prepend the supportive system message
-    supportive_message = SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT)
 
-    messages = [supportive_message] + base_messages
+    # Structure the prompt messages
+    messages = [
+        SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT),
+        HumanMessage(
+            content=config.PROMPT_TEMPLATE.format(
+                journal_entry=query,
+                response_starter_history=None,
+                context=docs_content,
+            )
+        ),
+    ]
+    # Get the run.id to use it in logging user feedback for LLM responses
+    # and for tracing.
     run = get_current_run_tree()
-    run_id = run.id if run else "0000"
-    first = True
+    run_id = run.id
 
+    first_chunk = True
     async for chunk in llm.astream(messages):
         content = chunk.content or ""
-        if first:
+        if first_chunk:
             yield content, run_id  # yield run_id with the first chunk
-            first = False
+            first_chunk = False
         else:
             yield content, None  # only content afterwards
 
 
 # Generate non-streaming response
 @traceable
-def generate(query: str, context: List[Document], llm: ChatFireworks, prompt):
+def generate(query: str, context: List[Document], llm: ChatFireworks):
     docs_content = "\n\n".join(doc.page_content for doc in context)
-    base_messages = prompt.invoke(
-        {"question": query, "context": docs_content, "history": None}
-    ).to_messages()
-    # Prepend the supportive system message
-    supportive_message = SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT)
 
-    messages = [supportive_message] + base_messages
+    # Structure the prompt messages
+    messages = [
+        SystemMessage(content=config.SUPPORTIVE_MESSAGE_CONTENT),
+        HumanMessage(
+            content=config.PROMPT_TEMPLATE.format(
+                journal_entry=query,
+                response_starter_history=None,
+                context=docs_content,
+            )
+        ),
+    ]
+
     run = get_current_run_tree()
     print(f"generate Run Id: {run.id}")
     response = llm.invoke(messages)
