@@ -144,7 +144,7 @@ authenticator = Authenticate(
     secret_credentials_path="client_secret.json",
     cookie_name="my_cookie_name",  # TODO: do we need this?
     cookie_key="this_is_secret",  # TODO: do we need this?
-    redirect_uri="https://wise-friend-dev.streamlit.app",
+    redirect_uri=st.secrets["google"]["redirect_uri"],
 )
 
 ### Streamlit interface
