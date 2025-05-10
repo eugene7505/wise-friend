@@ -5,7 +5,6 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import utils
-from sqlalchemy import create_engine
 from streamlit_google_auth import Authenticate
 import json
 import config
@@ -13,6 +12,9 @@ import config
 from langsmith import Client
 import logging
 import asyncio
+from supabase.client import create_client
+from typing import List, Dict, Any
+
 
 # Set up logging configuration
 logging.basicConfig(
@@ -27,8 +29,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize the Langsmith client for logging user feedback
-client = Client()
-db_engine = create_engine(config.PSQL_URL)
+langsmith_client = Client()
+supabase_client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 # Initialize Streamlit session state to manage the app's state across runs
 if "initialized" not in st.session_state:
@@ -47,6 +49,8 @@ if "dry_run" not in st.session_state:
     st.session_state.dry_run = False
 if "top_citations" not in st.session_state:
     st.session_state.top_citations = ""
+if "entries" not in st.session_state:
+    st.session_state.journal_entries = []
 
 
 # Function to set the state of app to control the interface flow.
@@ -67,7 +71,7 @@ def display_feedback_button():
 # It logs the feedback score (0: thumbs down, 1: thumbs up) and the comment (if any) to Langsmith
 def log_user_feedback():
     if not st.session_state.dry_run:
-        client.create_feedback(
+        langsmith_client.create_feedback(
             st.session_state.response_run_id,
             key="feedback-key",
             score=st.session_state.user_feedback,
@@ -126,19 +130,18 @@ def display_reference(top_citations):
             st.markdown("---")
 
 
-def display_entries(entries):
-    df = pd.DataFrame(entries, columns=["Entry", "Date"])
+def display_entries(entries: List[Dict[str, Any]]):
+    df = pd.DataFrame(entries)
     st.dataframe(df, hide_index=True)
 
 
-# TODO: Setup secret management https://docs.streamlit.io/develop/concepts/connections/secrets-management
 with open("client_secret.json", "w") as f:
     json.dump(json.loads(st.secrets["google"]["client_secret_json"]), f)
 authenticator = Authenticate(
     secret_credentials_path="client_secret.json",
     cookie_name="my_cookie_name",  # TODO: do we need this?
     cookie_key="this_is_secret",  # TODO: do we need this?
-    redirect_uri="http://localhost:8501",
+    redirect_uri=st.secrets["google"]["redirect_uri"],
 )
 
 ### Streamlit interface
@@ -150,8 +153,8 @@ userid = (
     if st.session_state.connected
     else config.TEST_USER_ID
 )
-wise_store, journal_store = utils.load_vector_stores(embeddings, userid)
-collection_table = utils.get_collection_table(db_engine)
+wise_store, journal_store = utils.load_vector_stores(supabase_client, embeddings)
+st.session_state.wise_collection = utils.get_wise_collection(supabase_client, userid)
 
 # To start, streamlit run wise_friend_streamlit.py. Add "-- dry-run" to run in dry-run mode.
 if not st.session_state.initialized:
@@ -175,10 +178,10 @@ st.button("Reflect", on_click=set_state, args=[1])
 if st.session_state.llm_response:
     display_wise_response()
     display_reference(st.session_state.top_citations)
-    if st.session_state.entries:
+    if st.session_state.journal_entries:
         st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
         # Display the entries
-        display_entries(st.session_state.entries)
+        display_entries(st.session_state.journal_entries)
 
 # Store the journal entry and generate wise response once the user clicks the "Reflect" button
 if st.session_state.stage == 1:
@@ -187,6 +190,7 @@ if st.session_state.stage == 1:
         utils.add_journal_entry(
             journal_store,
             st.session_state.journal_entry,
+            userid,
             st.session_state.date,
             st.session_state.dry_run,
         )
@@ -194,9 +198,11 @@ if st.session_state.stage == 1:
 
         # wise responses
         retrieved_docs = utils.retrieve(
-            st.session_state.journal_entry, wise_store, st.session_state.dry_run
+            st.session_state.journal_entry, wise_store, userid, st.session_state.dry_run
         )
-        logger.info(f"Retrieved {len(retrieved_docs)} documents from the wise_repo")
+        logger.info(
+            f"Retrieved {len(retrieved_docs)} documents from the wise_embeddings"
+        )
 
         if not st.session_state.dry_run:
             if len(retrieved_docs) == 0:
@@ -214,14 +220,16 @@ if st.session_state.stage == 1:
                 display_reference(st.session_state.top_citations)
 
         # Retrieve relevant journal entries
-        st.session_state.entries = utils.get_journal_entries(db_engine, userid)
-        logger.info(
-            f"Retrieved {len(st.session_state.entries)} entries from the journal"
+        st.session_state.journal_entries = utils.get_journal_entries(
+            supabase_client, userid
         )
-        if st.session_state.entries:
+        logger.info(
+            f"Retrieved {len(st.session_state.journal_entries)} entries from the journal"
+        )
+        if st.session_state.journal_entries:
             st.header("☀️ Your recent mood 🌤️🌦️🌧️⛈️")
             # Display the entries
-            display_entries(st.session_state.entries)
+            display_entries(st.session_state.journal_entries)
     else:
         st.error("Please enter some content.")
 
@@ -240,19 +248,18 @@ with st.sidebar:
             file_path = f"/tmp/{uploaded_file.name}"
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            utils.add_wise_entry(wise_store, file_path)
-            utils.update_collection(
-                collection_table,
+            utils.add_wise_entry(wise_store, file_path, userid)
+            utils.add_wise_collection(
+                supabase_client,
                 userid,
                 file_path.split("/")[-1],
                 st.session_state.date,
-                db_engine,
             )
             st.success("Wise friend added!")
             # update states
-            st.session_state.wise_collection += [
-                (uploaded_file.name, st.session_state.date)
-            ]
+            st.session_state.wise_collection.update(
+                {"content": uploaded_file.name, "date": st.session_state.date}
+            )
             logger.info(
                 f"Updating states: wise_collection = {st.session_state.wise_collection}, uploaded_file = {st.session_state.uploaded_file}"
             )
