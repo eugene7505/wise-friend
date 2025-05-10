@@ -104,13 +104,13 @@ def load_vector_stores(client, embeddings):
     wise_store = SupabaseVectorStore(
         embedding=embeddings,
         client=client,
-        table_name="wise_embeddings",
+        table_name=config.WISE_EMBEDDING_TABLE,
         query_name="similar_wise_documents",
     )
     journal_store = SupabaseVectorStore(
         embedding=embeddings,
         client=client,
-        table_name="journal_embeddings",
+        table_name=config.JOURNAL_EMBEDDING_TABLE,
         query_name=None,  # None, as we don't do similarity search for journal entries
     )
     return wise_store, journal_store

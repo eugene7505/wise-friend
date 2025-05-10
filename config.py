@@ -29,5 +29,6 @@ Wise Response:
 PSQL_URL = "postgresql+psycopg://langchain:langchain@localhost:6024/langchain"  # Uses psycopg3!
 WISE_COLLECTION_TABLE = "wise_collection"
 JOURNAL_EMBEDDING_TABLE = "journal_embeddings"
+WISE_EMBEDDING_TABLE = "wise_embeddings"
 
 TEST_USER_ID = "test123"
